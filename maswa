@@ -35,6 +35,7 @@ TweenService=game:GetService("TweenService")
 VirtualUser=game:GetService("VirtualUser")
 TextChatService=game:GetService("TextChatService")
 MarketplaceService=game:GetService("MarketplaceService")
+UserService=game:GetService("UserService")
 
 local IsStudio=RunService:IsStudio()
 local IsLegacyChat=TextChatService.ChatVersion==Enum.ChatVersion.LegacyChatService
@@ -120,78 +121,18 @@ local CoreGuiTypes={
 	["emotes"]=Enum.CoreGuiType.EmotesMenu,
 	["chat"]=Enum.CoreGuiType.Chat
 }
-
-local CoreGuiTypesList={"Inventory","Leaderboard","Emotes","Chat","Captures","SelfView","All","Console"}
-local CoreGuiTypeIndex=1
-
-local FlyCache={}
-local TeleportToolCache={}
-local FlashlightToolCache={}
-local ESPToolCache,ESPToolObjectCache={},{}
-local ESPCache,ESPNPCCache={},{}
-local HitboxCache={}
-
+local CoreGuiTypeIndex,CoreGuiTypesList=1,{"Inventory","Leaderboard","Emotes","Chat","Captures","SelfView","All","Console"}
 local FixIndex,Fixes=1,{"Lighting","Camera","Player","Accessory","Boost","Other","All"}
 local UpdateIndex,UpdateList=1,{"Boost","Player","All"}
+
+local FlyCache,TeleportToolCache,FlashlightToolCache,ESPToolCache,ESPToolObjectCache,ESPCache,ESPNPCCache,HitboxCache={},{},{},{},{},{},{},{}
 local SelectIndex,SelectInfo=1,nil
 local raycastParams=RaycastParams.new()
-
-local AFKIdleConnection=nil
-local AntiLagObjectAddedConnection=nil
-local SpinCharAddedConnection=nil
-local AntiFlingCharAddedConnection=nil
-local AntiFlingAddedConnection=nil
-local FollowLoopConnection=nil
-local ViewCharAddedConnection=nil
-local AutoJumpLoopConnection=nil
-
-local TurnVisibleFunc=nil
-
-local ViewInstance=nil
-local DanceInstance=nil
-local SpinInstance=nil
-
-local MaxZoomEnabled=false
-local MinZoomEnabled=false
-local AntiFlingEnabled=false
-local ThirdPersonEnabled=LocalPlayer.CameraMode==Enum.CameraMode.Classic
-local NoclipConnection=nil
-local DiscoEnabled=false
-local WalkSpeedEnabled=false
-local HealthEnabled=false
-local JumpEnabled=false
-local InvisibleEnabled=false
-local SpinEnabled=false
-local FollowEnabled=false
-local NoclipEnabled=false
-local FlyEnabled=false
-local BoostAnimEnabled,IdleAnimEnabled=false,false
-local ESPEnabled,ESPNPCEnabled=false,false
-
-local TeleportToolEnabled=false
-local ESPToolEnabled=false
-local FlashlightToolEnabled=false
-local ViewEnabled=false
-local AutoJumpEnabled=false
-local HitboxEnabled=false
-local SuperHitboxEnabled=false
-local NoAccessoryEnabled=false
-
-local AimEnabled=false
-local AimConnection=nil
-local AimInstance=nil
-
-local MaxZoomThread,MinZoomThread=nil,nil
-local DiscoThread=nil
-local WalkSpeedThread=nil
-local HealthThread=nil
-local JumpThread=nil
-local SpinThread=nil
-local BoostAnimThread=nil
-
+local TurnVisible;
+local DanceInstance,SpinInstance,AimInstance,ViewInstance;
+local InfoEnabled,ThirdPersonEnabled,DiscoEnabled,MaxZoomEnabled,MinZoomEnabled,AimEnabled,ESPEnabled,ESPNPCEnabled,BoostAnimEnabled,IdleAnimEnabled,AntiFlingEnabled,WalkSpeedEnabled,HealthEnabled,JumpEnabled,InvisibleEnabled,SpinEnabled,FollowEnabled,NoclipEnabled,FlyEnabled,ViewEnabled,AutoJumpEnabled,NoAccessoryEnabled,HitboxEnabled,SuperHitboxEnabled,TeleportToolEnabled,ESPToolEnabled,FlashlightToolEnabled=false,LocalPlayer.CameraMode==Enum.CameraMode.Classic,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false
+local AFKIdled,AntiLagObjectAdded,SpinCharAdded,AntiFlingCharAdded,ViewCharAdded,AntiFlingAdded,FollowLooped,AutoJumpLooped,NoclipLooped,AimLooped,SIPlaceNamePressed,SIPlaceIdPressed,SIPlayerNamePressed,SIPlayerIdPressed,SIAppearancePressed,SILoopThread,MaxZoomThread,MinZoomThread,DiscoThread,WalkSpeedThread,HealthThread,JumpThread,DanceAnimTrack,BoostAnimThread,SpinThread;
 local Values={["MaxZoom"]=40,["MinZoom"]=0.5,["WalkSpeed"]=16,["Health"]=100,["Jump"]=50,["FlySpeed"]=100,["SpinSpeed"]=9999,["AnimSpeed"]=2,["HitboxSize"]=1,["AimType"]="Player",["AimTargetType"]="Head",["AimRange"]=15}
-
-local DanceAnimTrack=nil
 
 for i,v in ipairs(Enum.CoreGuiType:GetEnumItems()) do CoreGuiTypes[string.lower(v.Name)]=v end
 
@@ -334,181 +275,168 @@ Strs.GetNumber=function(s,defautValue,originalValue)
 	return nil
 end
 
-local function Cleanup(object)
-	if type(object)~="nil" then 
-		local taskType=typeof(object)
-		if taskType=="function" then
-			local success,result=pcall(function()
-				object()
-			end)
-			if not success then
-			end
-		elseif taskType=="RBXScriptConnection" then
-			object:Disconnect()
-		elseif taskType=="Instance" then
-			if object and object.Parent~=nil then
-				object:Destroy()
-			end
-		elseif taskType=="thread" then
-			local wasCancelled:boolean?=nil
-			if coroutine.running()~=object then
-				wasCancelled=pcall(function()
-					task.cancel(object)
-				end)
-			end
-			if not wasCancelled then
-				local toClean=object
-				task.defer(function()
-					task.cancel(toClean)
-				end)
-			end
-		elseif type(object.Destroy)=="function" then
-			object:Destroy()
-		elseif type(object.destroy)=="function" then
-			object:destroy()
-		elseif type(object.disconnect)=="function" then
-			object:disconnect()
+Strs.ToFloatString=function(x)
+	return x%1==0 and `{x}` or `{string.format("%.2f",x)}`
+end
+
+function Cleanup(object)
+	if not object or type(object)=="nil" then return nil end
+	local objectType=typeof(object)
+	if objectType=="function" then
+		local success,result=pcall(function()
+			object()
+		end)
+		if not success then
 		end
+	elseif objectType=="RBXScriptConnection" then
+		object:Disconnect()
+	elseif objectType=="Instance" then
+		if object and object.Parent~=nil then
+			object:Destroy()
+		end
+	elseif objectType=="thread" then
+		local wasCancelled:boolean?=nil
+		if coroutine.running()~=object then
+			wasCancelled=pcall(function()
+				task.cancel(object)
+			end)
+		end
+		if not wasCancelled then
+			local toClean=object
+			task.defer(function()
+				task.cancel(toClean)
+			end)
+		end
+	elseif type(object.Destroy)=="function" then
+		object:Destroy()
+	elseif type(object.destroy)=="function" then
+		object:destroy()
+	elseif type(object.disconnect)=="function" then
+		object:disconnect()
 	end
+	return nil
 end
-
-local function ClearCache(t)
-	for k,v in pairs(t) do Cleanup(v) end
+function ClearCache(t)
+	for k,v in t do t[k]=Cleanup(v) end return unpack(t)
 end
-
-local function Round(num,numDecimalPlaces)
-	local multi=10^(numDecimalPlaces or 0)
-	return math.floor(num*multi+0.5)/multi
-end
-
-local function IsAlive(v)
+function IsAlive(v)
 	return (typeof(v)=="Instance" and typeof(v.Parent)=="Instance") and true or false
 end
-
-local function IsFling(v)
+function IsFling(v)
 	return IsAlive(v) and v.ClassName=="BodyGyro" or v.ClassName=="BodyPosition" or v.ClassName=="BodyForce" or v.ClassName=="BodyThrust" or v.ClassName=="BodyVelocity" or v.ClassName=="BodyAngularVelocity"
 end
-	
-local function SetPartAnchoredChildren(v,anchored)
+function IsDied(model)
+	if IsAlive(model) and model:IsDescendantOf(workspace) and model.ClassName=="Model" then local humanoid=model:FindFirstChildOfClass("Humanoid") if humanoid and humanoid.Parent and humanoid:GetState()~=Enum.HumanoidStateType.Dead and humanoid.Health>0 and humanoid.MaxHealth>0 then return false end end return true
+end
+function SetPartAnchoredChildren(v,anchored)
 	if IsAlive(v) then for i,v in ipairs(v:GetChildren()) do if IsAlive(v) and v.ClassName=="Part" or v.ClassName=="MeshPart" then v.Anchored=anchored end end end
 end
-
-local function GetHeadPart(model,func)
-	if not IsAlive(model) or model.ClassName~="Model" then return end for i,v in ipairs(model:GetChildren()) do if IsAlive(v) and v.ClassName=="Part" or v.ClassName=="MeshPart" and v.Name=="Head" then if type(func)=="function" then func(v) end return v end end return nil
+function GetHeadPart(model,func)
+	if IsAlive(model) and model.ClassName=="Model" then for i,v in ipairs(model:GetChildren()) do if IsAlive(v) and v.ClassName=="Part" or v.ClassName=="MeshPart" and v.Name=="Head" then if type(func)=="function" then func(v) end return v end end end return nil
+end
+function GetRootPart(model,func)
+	if IsAlive(model) and model.ClassName=="Model" then local rootPart=model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("Torso") or model:FindFirstChild("UpperTorso") or model.PrimaryPart if IsAlive(rootPart) then if type(func)=="function" then func(rootPart) end return rootPart end end return nil
+end
+function GetHumanoid(model,func)
+	if IsAlive(model) and model.ClassName=="Model" then local humanoid=model:FindFirstChildOfClass("Humanoid") if IsAlive(humanoid) then if type(func)=="function" then func(humanoid) end return humanoid end end return nil
+end
+function SetHumanoid(model,data)
+	GetHumanoid(model,function(humanoid) for k,v in pairs(data) do humanoid[k]=v end end)
+end
+function GetCharacter(model,func)
+	local rootPart,humanoid=GetRootPart(model),GetHumanoid(model) if rootPart and humanoid and not IsDied(model) then if type(func)=="function" then func(model) end return model end return nil
+end
+function IsR15(model)
+	local humanoid=GetHumanoid(model) return humanoid and humanoid.RigType==Enum.HumanoidRigType.R15
 end
 
-local function GetRootPart(model)
-	if IsAlive(model) and model.ClassName=="Model" then
-		local rootPart=model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("Torso") or model:FindFirstChild("UpperTorso") or model.PrimaryPart
-		if IsAlive(rootPart) and rootPart.ClassName=="Part" then
-			return rootPart
+function toClipboard(txt)
+	if everyClipboard then
+		everyClipboard(tostring(txt))
+		Notify("Clipboard","Copied to clipboard")
+	else
+		Notify("Clipboard","Your exploit doesn't have the ability to use the clipboard")
+	end
+end
+
+function Round(num,numDecimalPlaces)
+	local multi=10^(numDecimalPlaces or 0) return math.floor(num*multi+0.5)/multi
+end
+
+-- NPC Utilities
+function IsNPC(model)
+	if IsAlive(model) and model.ClassName=="Model" and model:FindFirstChildOfClass("Humanoid") then return not GetPlayer(model) end return false
+end
+function SafeNPC(added,removed)
+	local descendants=workspace:GetDescendants()
+	for i,v in ipairs(descendants) do
+		task.spawn(function() if IsNPC(v) then if IsDied(v) then removed(v) else added(v) end end end)
+	end
+	workspace.DescendantAdded:Connect(function(v)
+		if IsNPC(v) then if IsDied(v) then removed(v) else added(v) end end
+	end)
+	workspace.DescendantRemoving:Connect(function(v)
+		if IsNPC(v) then removed(v) end
+	end)
+end
+
+-- Player Utilities
+function GetPlayer(object,func)
+	if type(object)=="nil" then return nil end
+	local result,objectType=nil,typeof(object)
+	if objectType=="Instance" then
+		if IsAlive(object) then
+			if object.ClassName=="Model" then 
+				for i,v in ipairs(Players:GetPlayers()) do if IsAlive(v) and not IsDied(v.Character) and v.Character==object then result=v break end end
+			elseif object.ClassName=="Player" then
+				result=object 
+			end
+		end
+	elseif objectType=="string" or objectType=="number" then
+		local inputNumber=tonumber(object)
+		if inputNumber then
+			for i,v in ipairs(Players:GetPlayers()) do if IsAlive(v) and v.UserId==inputNumber then result=v break end end
+		else
+			local s=tostring(object) or ""
+			local ls=string.lower(s)
+			if ls=="!me" then
+				if IsAlive(LocalPlayer) then result=LocalPlayer end
+			elseif ls=="!random" then
+				local matches={}
+				for i,v in ipairs(Players:GetPlayers()) do if IsAlive(v) and IsAlive(LocalPlayer) and v.UserId~=LocalPlayer.UserId then table.insert(matches,v) end end
+				if #matches>=2 then result=matches[math.random(1,#matches)] end
+			else
+				for i=1,4 do
+					for j,v in ipairs(Players:GetPlayers()) do
+						if IsAlive(v) then
+							local name=if i==1 then v.Name elseif i==2 then v.DisplayName elseif i==3 then string.lower(v.Name) else string.lower(v.DisplayName)
+							if string.find(name,s) then result=v break end
+						end
+					end
+					if typeof(result)=="Instance" then break end
+				end
+			end
 		end
 	end
-	return nil
-end
-
-local function GetHumanoid(model,func):Humanoid
-	if IsAlive(model) and model.ClassName=="Model" then local humanoid=model:FindFirstChildOfClass("Humanoid") if IsAlive(humanoid) then if type(func)=="function" then pcall(function() func(humanoid) end) end return humanoid end end return nil
-end
-
-local function SetHumanoid(model,data)
-	GetHumanoid(model,function(humanoid) for k,v in pairs(data) do pcall(function() humanoid[k]=v end) end end)
-end
-
-local function IsR15(model)
-	local result=false
-	GetHumanoid(model,function(humanoid) result=humanoid.RigType==Enum.HumanoidRigType.R15 end)
+	if type(func)=="function" and typeof(result)=="Instance" then func(result) end
 	return result
 end
-
-local function GetCharacter(model)
-	if IsAlive(model) and model.ClassName=="Model" then
-		local rootPart=model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("Torso") or model:FindFirstChild("UpperTorso") or model.PrimaryPart
-		local humanoid=model:FindFirstChildOfClass("Humanoid")
-		if IsAlive(rootPart) and IsAlive(humanoid) then
-			if humanoid:GetState()~=Enum.HumanoidStateType.Dead and humanoid.Health>0 and humanoid.MaxHealth>0 then
-				return model
-			end
-		end
-	end
-	return nil
-end
-
-local function IsDied(model)
-	if IsAlive(model) and model:IsDescendantOf(workspace) then
-		local humanoid=GetHumanoid(model)
-		if IsAlive(humanoid) and humanoid:GetState()~=Enum.HumanoidStateType.Dead and humanoid.Health>0 and humanoid.MaxHealth>0 then
-			return false
-		end
-	end
-	return true
-end
-
-local function GetPlayer(s)
-	if not s then return end
-	if tonumber(s) then
-		return Players:GetPlayerByUserId(tonumber(s))
-	elseif type(s)=="string" then
-		local ls=string.lower(tostring(s))
-		if ls=="me" then
-			return LocalPlayer
-		elseif ls=="random" then
-			local matches={}
-			for i,player in ipairs(Players:GetPlayers()) do
-				if player~=LocalPlayer then
-					table.insert(matches,player)
-				end
-			end
-			if #matches>=2 then
-				return matches[math.random(1,#matches)]
-			end
-		else
-			local player=nil
-			local plrs={}
-			for i=1,4 do
-				plrs=Players:GetPlayers()
-				for j,v in ipairs(plrs) do
-					local name=if i==1 then v.Name elseif i==2 then v.DisplayName elseif i==3 then string.lower(v.Name) else string.lower(v.DisplayName)
-					if string.find(name,s) then player=v break end
-				end
-				if player then break end
-			end
-			return player
-		end
-	elseif typeof(s)=="Instance" then
-		if s.ClassName=="Model" then return Players:GetPlayerFromCharacter(s) end return s
-	end
-	return nil
-end
-
-local function SafePlayer(added,removed)
+function SafePlayer(added,removed)
 	for i,player in ipairs(Players:GetPlayers()) do
-		task.spawn(function()
-			if IsAlive(player.Parent) then 
-				added(player)
-			else
-				removed(player)
-			end 
-		end)
+		task.spawn(function() if IsAlive(player) then  added(player) else removed(player) end end)
 	end
 	Players.PlayerAdded:Connect(function(player)
-		if IsAlive(player.Parent) then 
-			added(player)
-		else
-			removed(player)
-		end 
+		if IsAlive(player) then  added(player) else removed(player) end 
 	end)
 	Players.PlayerRemoving:Connect(removed)
 end
-
-local function GetPlayerIcon(userId)
+function GetPlayerIcon(userId)
 	local success,image=pcall(function()
 		return Players:GetUserThumbnailAsync(userId,Enum.ThumbnailType.HeadShot,Enum.ThumbnailSize.Size100x100)
 	end)
 	return success and image or ""
 end
-
-local function GetUserInfo(userId)
+function GetUserInfo(userId)
 	local success,userInfo=pcall(function()
 		return UserService:GetUserInfosByUserIdsAsync({userId})[1]
 	end)
@@ -516,7 +444,12 @@ local function GetUserInfo(userId)
 	return nil
 end
 
-local function CreateUI(parent)
+-- MarketplaceService Utilities
+function GetProductInfo(id)
+	local success,Asset=pcall(function() return MarketplaceService:GetProductInfo(PlaceId) end) if success then return Asset end return nil
+end
+
+function CreateUI(parent)
 	local MASWA={
 		MASWA=Instance.new("ScreenGui"),
 		Menu=Instance.new("Frame"),
@@ -619,8 +552,6 @@ local function CreateUI(parent)
 		NoclipToggle=Instance.new("TextButton"),
 		Turns_7=Instance.new("Frame"),
 		Title_12=Instance.new("TextLabel"),
-		SpinSpeedBox_2=Instance.new("TextBox"),
-		UITextSizeConstraint_14=Instance.new("UITextSizeConstraint"),
 		WallHopButton=Instance.new("TextButton"),
 		UITextSizeConstraint_15=Instance.new("UITextSizeConstraint"),
 		FlyToggle=Instance.new("TextButton"),
@@ -776,7 +707,7 @@ local function CreateUI(parent)
 		UITextSizeConstraint_43=Instance.new("UITextSizeConstraint"),
 		InfoButton=Instance.new("TextButton"),
 		UITextSizeConstraint_44=Instance.new("UITextSizeConstraint"),
-		ServerInfoScroller=Instance.new("ScrollingFrame"),
+		InfoScroller=Instance.new("ScrollingFrame"),
 		UIListLayout_3=Instance.new("UIListLayout"),
 		PaddingS8=Instance.new("Frame"),
 		PaddingS7=Instance.new("Frame"),
@@ -1712,24 +1643,6 @@ local function CreateUI(parent)
 	MASWA.Title_12.TextColor3=Color3.fromRGB(255,255,255)
 	MASWA.Title_12.TextScaled=true
 	MASWA.Title_12.TextWrapped=true
-
-	MASWA.SpinSpeedBox_2.Name="SpinSpeedBox"
-	MASWA.SpinSpeedBox_2.Parent=MASWA.Characters
-	MASWA.SpinSpeedBox_2.BackgroundColor3=Color3.fromRGB(30,30,30)
-	MASWA.SpinSpeedBox_2.BorderSizePixel=0
-	MASWA.SpinSpeedBox_2.Position=UDim2.new(0,325,0,182)
-	MASWA.SpinSpeedBox_2.Size=UDim2.new(0,140,0,37)
-	MASWA.SpinSpeedBox_2.Visible=false
-	MASWA.SpinSpeedBox_2.Font=Enum.Font.FredokaOne
-	MASWA.SpinSpeedBox_2.PlaceholderColor3=Color3.fromRGB(163,159,155)
-	MASWA.SpinSpeedBox_2.PlaceholderText="Spin Speed"
-	MASWA.SpinSpeedBox_2.Text=""
-	MASWA.SpinSpeedBox_2.TextColor3=Color3.fromRGB(255,255,255)
-	MASWA.SpinSpeedBox_2.TextScaled=true
-	MASWA.SpinSpeedBox_2.TextWrapped=true
-
-	MASWA.UITextSizeConstraint_14.Parent=MASWA.SpinSpeedBox_2
-	MASWA.UITextSizeConstraint_14.MaxTextSize=20
 
 	MASWA.WallHopButton.Name="WallHopButton"
 	MASWA.WallHopButton.Parent=MASWA.Characters
@@ -3040,7 +2953,7 @@ local function CreateUI(parent)
 	MASWA.InfoButton.Position=UDim2.new(0,317,0,85)
 	MASWA.InfoButton.Size=UDim2.new(0,140,0,40)
 	MASWA.InfoButton.Font=Enum.Font.FredokaOne
-	MASWA.InfoButton.Text="Info (Off)"
+	MASWA.InfoButton.Text="Open Info"
 	MASWA.InfoButton.TextColor3=Color3.fromRGB(255,255,255)
 	MASWA.InfoButton.TextScaled=true
 	MASWA.InfoButton.TextWrapped=true
@@ -3048,93 +2961,93 @@ local function CreateUI(parent)
 	MASWA.UITextSizeConstraint_44.Parent=MASWA.InfoButton
 	MASWA.UITextSizeConstraint_44.MaxTextSize=25
 
-	MASWA.ServerInfoScroller.Name="ServerInfoScroller"
-	MASWA.ServerInfoScroller.Parent=MASWA.Pages
-	MASWA.ServerInfoScroller.Active=true
-	MASWA.ServerInfoScroller.BackgroundColor3=Color3.fromRGB(30,30,30)
-	MASWA.ServerInfoScroller.BorderSizePixel=0
-	MASWA.ServerInfoScroller.Size=UDim2.new(1,0,1,0)
-	MASWA.ServerInfoScroller.Visible=false
-	MASWA.ServerInfoScroller.BottomImage="rbxasset://textures/ui/Scroll/scroll-middle.png"
-	MASWA.ServerInfoScroller.CanvasPosition=Vector2.new(0,0)
-	MASWA.ServerInfoScroller.CanvasSize=UDim2.new(0,0,0,0)
-	MASWA.ServerInfoScroller.ScrollBarThickness=0
-	MASWA.ServerInfoScroller.TopImage="rbxasset://textures/ui/Scroll/scroll-middle.png"
-	MASWA.ServerInfoScroller.VerticalScrollBarInset=Enum.ScrollBarInset.ScrollBar
-	MASWA.ServerInfoScroller.AutomaticCanvasSize=Enum.AutomaticSize.Y
+	MASWA.InfoScroller.Name="InfoScroller"
+	MASWA.InfoScroller.Parent=MASWA.Pages
+	MASWA.InfoScroller.Active=true
+	MASWA.InfoScroller.BackgroundColor3=Color3.fromRGB(30,30,30)
+	MASWA.InfoScroller.BorderSizePixel=0
+	MASWA.InfoScroller.Size=UDim2.new(1,0,1,0)
+	MASWA.InfoScroller.Visible=false
+	MASWA.InfoScroller.BottomImage="rbxasset://textures/ui/Scroll/scroll-middle.png"
+	MASWA.InfoScroller.CanvasPosition=Vector2.new(0,0)
+	MASWA.InfoScroller.CanvasSize=UDim2.new(0,0,0,0)
+	MASWA.InfoScroller.ScrollBarThickness=0
+	MASWA.InfoScroller.TopImage="rbxasset://textures/ui/Scroll/scroll-middle.png"
+	MASWA.InfoScroller.VerticalScrollBarInset=Enum.ScrollBarInset.ScrollBar
+	MASWA.InfoScroller.AutomaticCanvasSize=Enum.AutomaticSize.Y
 
-	MASWA.UIListLayout_3.Parent=MASWA.ServerInfoScroller
+	MASWA.UIListLayout_3.Parent=MASWA.InfoScroller
 	MASWA.UIListLayout_3.HorizontalAlignment=Enum.HorizontalAlignment.Center
 	MASWA.UIListLayout_3.SortOrder=Enum.SortOrder.LayoutOrder
 
 	MASWA.PaddingS8.Name="PaddingS8"
-	MASWA.PaddingS8.Parent=MASWA.ServerInfoScroller
+	MASWA.PaddingS8.Parent=MASWA.InfoScroller
 	MASWA.PaddingS8.BackgroundTransparency=1.000
 	MASWA.PaddingS8.LayoutOrder=15
 	MASWA.PaddingS8.Size=UDim2.new(0,470,0,10)
 
 	MASWA.PaddingS7.Name="PaddingS7"
-	MASWA.PaddingS7.Parent=MASWA.ServerInfoScroller
+	MASWA.PaddingS7.Parent=MASWA.InfoScroller
 	MASWA.PaddingS7.BackgroundTransparency=1.000
 	MASWA.PaddingS7.LayoutOrder=13
 	MASWA.PaddingS7.Size=UDim2.new(0,470,0,10)
 
 	MASWA.PaddingS1.Name="PaddingS1"
-	MASWA.PaddingS1.Parent=MASWA.ServerInfoScroller
+	MASWA.PaddingS1.Parent=MASWA.InfoScroller
 	MASWA.PaddingS1.BackgroundTransparency=1.000
 	MASWA.PaddingS1.LayoutOrder=1
 	MASWA.PaddingS1.Size=UDim2.new(0,470,0,5)
 
 	MASWA.PaddingS11.Name="PaddingS11"
-	MASWA.PaddingS11.Parent=MASWA.ServerInfoScroller
+	MASWA.PaddingS11.Parent=MASWA.InfoScroller
 	MASWA.PaddingS11.BackgroundTransparency=1.000
 	MASWA.PaddingS11.LayoutOrder=21
 	MASWA.PaddingS11.Size=UDim2.new(0,470,0,10)
 
 	MASWA.PaddingS2.Name="PaddingS2"
-	MASWA.PaddingS2.Parent=MASWA.ServerInfoScroller
+	MASWA.PaddingS2.Parent=MASWA.InfoScroller
 	MASWA.PaddingS2.BackgroundTransparency=1.000
 	MASWA.PaddingS2.LayoutOrder=3
 	MASWA.PaddingS2.Size=UDim2.new(0,470,0,10)
 
 	MASWA.PaddingS3.Name="PaddingS3"
-	MASWA.PaddingS3.Parent=MASWA.ServerInfoScroller
+	MASWA.PaddingS3.Parent=MASWA.InfoScroller
 	MASWA.PaddingS3.BackgroundTransparency=1.000
 	MASWA.PaddingS3.LayoutOrder=5
 	MASWA.PaddingS3.Size=UDim2.new(0,470,0,10)
 
 	MASWA.PaddingS4.Name="PaddingS4"
-	MASWA.PaddingS4.Parent=MASWA.ServerInfoScroller
+	MASWA.PaddingS4.Parent=MASWA.InfoScroller
 	MASWA.PaddingS4.BackgroundTransparency=1.000
 	MASWA.PaddingS4.LayoutOrder=7
 	MASWA.PaddingS4.Size=UDim2.new(0,470,0,10)
 
 	MASWA.PaddingS9.Name="PaddingS9"
-	MASWA.PaddingS9.Parent=MASWA.ServerInfoScroller
+	MASWA.PaddingS9.Parent=MASWA.InfoScroller
 	MASWA.PaddingS9.BackgroundTransparency=1.000
 	MASWA.PaddingS9.LayoutOrder=17
 	MASWA.PaddingS9.Size=UDim2.new(0,470,0,10)
 
 	MASWA.PaddingS10.Name="PaddingS10"
-	MASWA.PaddingS10.Parent=MASWA.ServerInfoScroller
+	MASWA.PaddingS10.Parent=MASWA.InfoScroller
 	MASWA.PaddingS10.BackgroundTransparency=1.000
 	MASWA.PaddingS10.LayoutOrder=19
 	MASWA.PaddingS10.Size=UDim2.new(0,470,0,10)
 
 	MASWA.PaddingS5.Name="PaddingS5"
-	MASWA.PaddingS5.Parent=MASWA.ServerInfoScroller
+	MASWA.PaddingS5.Parent=MASWA.InfoScroller
 	MASWA.PaddingS5.BackgroundTransparency=1.000
 	MASWA.PaddingS5.LayoutOrder=9
 	MASWA.PaddingS5.Size=UDim2.new(0,470,0,10)
 
 	MASWA.PaddingS6.Name="PaddingS6"
-	MASWA.PaddingS6.Parent=MASWA.ServerInfoScroller
+	MASWA.PaddingS6.Parent=MASWA.InfoScroller
 	MASWA.PaddingS6.BackgroundTransparency=1.000
 	MASWA.PaddingS6.LayoutOrder=11
 	MASWA.PaddingS6.Size=UDim2.new(0,470,0,10)
 
 	MASWA.PlaceNames.Name="PlaceNames"
-	MASWA.PlaceNames.Parent=MASWA.ServerInfoScroller
+	MASWA.PlaceNames.Parent=MASWA.InfoScroller
 	MASWA.PlaceNames.BackgroundTransparency=1.000
 	MASWA.PlaceNames.LayoutOrder=4
 	MASWA.PlaceNames.Size=UDim2.new(0,450,0,20)
@@ -3164,7 +3077,7 @@ local function CreateUI(parent)
 	MASWA.Copy.TextWrapped=true
 
 	MASWA.PlaceIds.Name="PlaceIds"
-	MASWA.PlaceIds.Parent=MASWA.ServerInfoScroller
+	MASWA.PlaceIds.Parent=MASWA.InfoScroller
 	MASWA.PlaceIds.BackgroundTransparency=1.000
 	MASWA.PlaceIds.LayoutOrder=6
 	MASWA.PlaceIds.Size=UDim2.new(0,450,0,20)
@@ -3194,7 +3107,7 @@ local function CreateUI(parent)
 	MASWA.Copy_2.TextWrapped=true
 
 	MASWA.Appearances.Name="Appearances"
-	MASWA.Appearances.Parent=MASWA.ServerInfoScroller
+	MASWA.Appearances.Parent=MASWA.InfoScroller
 	MASWA.Appearances.BackgroundTransparency=1.000
 	MASWA.Appearances.LayoutOrder=20
 	MASWA.Appearances.Size=UDim2.new(0,450,0,20)
@@ -3224,7 +3137,7 @@ local function CreateUI(parent)
 	MASWA.Copy_3.TextWrapped=true
 
 	MASWA.PlayerNames.Name="PlayerNames"
-	MASWA.PlayerNames.Parent=MASWA.ServerInfoScroller
+	MASWA.PlayerNames.Parent=MASWA.InfoScroller
 	MASWA.PlayerNames.BackgroundTransparency=1.000
 	MASWA.PlayerNames.LayoutOrder=16
 	MASWA.PlayerNames.Size=UDim2.new(0,450,0,20)
@@ -3254,7 +3167,7 @@ local function CreateUI(parent)
 	MASWA.Copy_4.TextWrapped=true
 
 	MASWA.PlayerIds.Name="PlayerIds"
-	MASWA.PlayerIds.Parent=MASWA.ServerInfoScroller
+	MASWA.PlayerIds.Parent=MASWA.InfoScroller
 	MASWA.PlayerIds.BackgroundTransparency=1.000
 	MASWA.PlayerIds.LayoutOrder=18
 	MASWA.PlayerIds.Size=UDim2.new(0,450,0,20)
@@ -3284,7 +3197,7 @@ local function CreateUI(parent)
 	MASWA.Copy_5.TextWrapped=true
 
 	MASWA.MaxPlayerLabel.Name="MaxPlayerLabel"
-	MASWA.MaxPlayerLabel.Parent=MASWA.ServerInfoScroller
+	MASWA.MaxPlayerLabel.Parent=MASWA.InfoScroller
 	MASWA.MaxPlayerLabel.BackgroundTransparency=1.000
 	MASWA.MaxPlayerLabel.LayoutOrder=12
 	MASWA.MaxPlayerLabel.Size=UDim2.new(0,450,0,20)
@@ -3296,7 +3209,7 @@ local function CreateUI(parent)
 	MASWA.MaxPlayerLabel.TextXAlignment=Enum.TextXAlignment.Left
 
 	MASWA.ServerTimeLabel.Name="ServerTimeLabel"
-	MASWA.ServerTimeLabel.Parent=MASWA.ServerInfoScroller
+	MASWA.ServerTimeLabel.Parent=MASWA.InfoScroller
 	MASWA.ServerTimeLabel.BackgroundTransparency=1.000
 	MASWA.ServerTimeLabel.LayoutOrder=8
 	MASWA.ServerTimeLabel.Size=UDim2.new(0,450,0,20)
@@ -3308,7 +3221,7 @@ local function CreateUI(parent)
 	MASWA.ServerTimeLabel.TextXAlignment=Enum.TextXAlignment.Left
 
 	MASWA.PlayersLabel.Name="PlayersLabel"
-	MASWA.PlayersLabel.Parent=MASWA.ServerInfoScroller
+	MASWA.PlayersLabel.Parent=MASWA.InfoScroller
 	MASWA.PlayersLabel.BackgroundTransparency=1.000
 	MASWA.PlayersLabel.LayoutOrder=14
 	MASWA.PlayersLabel.Size=UDim2.new(0,450,0,20)
@@ -3320,7 +3233,7 @@ local function CreateUI(parent)
 	MASWA.PlayersLabel.TextXAlignment=Enum.TextXAlignment.Left
 
 	MASWA.Title_34.Name="Title"
-	MASWA.Title_34.Parent=MASWA.ServerInfoScroller
+	MASWA.Title_34.Parent=MASWA.InfoScroller
 	MASWA.Title_34.BackgroundTransparency=1.000
 	MASWA.Title_34.LayoutOrder=2
 	MASWA.Title_34.Size=UDim2.new(1,0,0,20)
@@ -3331,7 +3244,7 @@ local function CreateUI(parent)
 	MASWA.Title_34.TextWrapped=true
 
 	MASWA.Title_35.Name="Title"
-	MASWA.Title_35.Parent=MASWA.ServerInfoScroller
+	MASWA.Title_35.Parent=MASWA.InfoScroller
 	MASWA.Title_35.BackgroundTransparency=1.000
 	MASWA.Title_35.LayoutOrder=10
 	MASWA.Title_35.Size=UDim2.new(0,482,0,20)
@@ -3342,7 +3255,7 @@ local function CreateUI(parent)
 	MASWA.Title_35.TextWrapped=true
 
 	MASWA.Title_36.Name="Title"
-	MASWA.Title_36.Parent=MASWA.ServerInfoScroller
+	MASWA.Title_36.Parent=MASWA.InfoScroller
 	MASWA.Title_36.BackgroundTransparency=1.000
 	MASWA.Title_36.LayoutOrder=22
 	MASWA.Title_36.Size=UDim2.new(0,482,0,20)
@@ -3353,7 +3266,7 @@ local function CreateUI(parent)
 	MASWA.Title_36.TextWrapped=true
 
 	MASWA.Devs1.Name="Devs1"
-	MASWA.Devs1.Parent=MASWA.ServerInfoScroller
+	MASWA.Devs1.Parent=MASWA.InfoScroller
 	MASWA.Devs1.BackgroundTransparency=1.000
 	MASWA.Devs1.LayoutOrder=24
 	MASWA.Devs1.Size=UDim2.new(0,450,0,20)
@@ -3365,19 +3278,19 @@ local function CreateUI(parent)
 	MASWA.Devs1.TextXAlignment=Enum.TextXAlignment.Left
 
 	MASWA.PaddingS12.Name="PaddingS12"
-	MASWA.PaddingS12.Parent=MASWA.ServerInfoScroller
+	MASWA.PaddingS12.Parent=MASWA.InfoScroller
 	MASWA.PaddingS12.BackgroundTransparency=1.000
 	MASWA.PaddingS12.LayoutOrder=23
 	MASWA.PaddingS12.Size=UDim2.new(0,470,0,10)
 
 	MASWA.PaddingS13.Name="PaddingS13"
-	MASWA.PaddingS13.Parent=MASWA.ServerInfoScroller
+	MASWA.PaddingS13.Parent=MASWA.InfoScroller
 	MASWA.PaddingS13.BackgroundTransparency=1.000
 	MASWA.PaddingS13.LayoutOrder=25
 	MASWA.PaddingS13.Size=UDim2.new(0,470,0,10)
 
 	MASWA.Devs2.Name="Devs2"
-	MASWA.Devs2.Parent=MASWA.ServerInfoScroller
+	MASWA.Devs2.Parent=MASWA.InfoScroller
 	MASWA.Devs2.BackgroundTransparency=1.000
 	MASWA.Devs2.LayoutOrder=26
 	MASWA.Devs2.Size=UDim2.new(0,450,0,20)
@@ -3389,7 +3302,7 @@ local function CreateUI(parent)
 	MASWA.Devs2.TextXAlignment=Enum.TextXAlignment.Left
 
 	MASWA.Devs3.Name="Devs3"
-	MASWA.Devs3.Parent=MASWA.ServerInfoScroller
+	MASWA.Devs3.Parent=MASWA.InfoScroller
 	MASWA.Devs3.BackgroundTransparency=1.000
 	MASWA.Devs3.LayoutOrder=28
 	MASWA.Devs3.Size=UDim2.new(0,450,0,20)
@@ -3401,13 +3314,13 @@ local function CreateUI(parent)
 	MASWA.Devs3.TextXAlignment=Enum.TextXAlignment.Left
 
 	MASWA.PaddingS14.Name="PaddingS14"
-	MASWA.PaddingS14.Parent=MASWA.ServerInfoScroller
+	MASWA.PaddingS14.Parent=MASWA.InfoScroller
 	MASWA.PaddingS14.BackgroundTransparency=1.000
 	MASWA.PaddingS14.LayoutOrder=27
 	MASWA.PaddingS14.Size=UDim2.new(0,470,0,10)
 
 	MASWA.Devs4.Name="Devs4"
-	MASWA.Devs4.Parent=MASWA.ServerInfoScroller
+	MASWA.Devs4.Parent=MASWA.InfoScroller
 	MASWA.Devs4.BackgroundTransparency=1.000
 	MASWA.Devs4.LayoutOrder=30
 	MASWA.Devs4.Size=UDim2.new(0,450,0,20)
@@ -3419,13 +3332,13 @@ local function CreateUI(parent)
 	MASWA.Devs4.TextXAlignment=Enum.TextXAlignment.Left
 
 	MASWA.PaddingS15.Name="PaddingS15"
-	MASWA.PaddingS15.Parent=MASWA.ServerInfoScroller
+	MASWA.PaddingS15.Parent=MASWA.InfoScroller
 	MASWA.PaddingS15.BackgroundTransparency=1.000
 	MASWA.PaddingS15.LayoutOrder=29
 	MASWA.PaddingS15.Size=UDim2.new(0,470,0,10)
 
 	MASWA.PaddingS16.Name="PaddingS16"
-	MASWA.PaddingS16.Parent=MASWA.ServerInfoScroller
+	MASWA.PaddingS16.Parent=MASWA.InfoScroller
 	MASWA.PaddingS16.BackgroundTransparency=1.000
 	MASWA.PaddingS16.LayoutOrder=31
 	MASWA.PaddingS16.Size=UDim2.new(0,470,0,10)
@@ -3519,8 +3432,7 @@ local function CreateUI(parent)
 	
 	return MASWA.MASWA
 end
-
-local function GrabUI(frame)
+function GrabUI(frame)
 	task.spawn(function()
 		local dragging,dragInput,dragStart,startPos
 		frame.InputBegan:Connect(function(input)
@@ -3540,42 +3452,11 @@ local function GrabUI(frame)
 		end)
 	end)
 end
-
-local function IsNPC(v)
-	if IsAlive(v) and v.ClassName=="Model" and v:FindFirstChildOfClass("Humanoid") then return not Players:GetPlayerFromCharacter(v) end return false
-end
-
-local function SafeNPC(added,removed)
-	local descendants=workspace:GetDescendants()
-	for i,v in ipairs(descendants) do
-		task.spawn(function()
-			if IsNPC(v) then 
-				local humanoid=v:FindFirstChildOfClass("Humanoid")
-				if IsAlive(humanoid) then
-					if humanoid:GetState()~=Enum.HumanoidStateType.Dead and humanoid.Health>0 and humanoid.MaxHealth>0 then
-						added(v) 
-					else
-						removed(v) 
-					end
-				else
-					removed(v)
-				end
-			end
-		end)
-	end
-	workspace.DescendantAdded:Connect(function(v)
-		if IsNPC(v) then RunService.Heartbeat:Wait() added(v) end
-	end)
-	workspace.DescendantRemoving:Connect(function(npc)
-		if IsNPC(npc) then RunService.Heartbeat:Wait() removed(npc) end
-	end)
-end
-
-local function SetUIColorTable(t,color3)
+function SetUIColorTable(t,color3)
 	for k,v in pairs(t) do v.BackgroundColor3=color3 end
 end
 
-local function SetSaved(mode)
+function SetSaved(mode)
 	if mode=="Player" or mode=="All" then
 		for k,v in pairs(Saved.Player) do pcall(function() LocalPlayer[k]=v end) end
 	end
@@ -3592,16 +3473,15 @@ local function SetSaved(mode)
 		for k,v in pairs(Saved.Values) do pcall(function() Values[k]=v end) end
 	end
 end
-
-local function UpdateSaved(mode)
+function UpdateSaved(mode)
 	if mode=="Player" or mode=="All" then
-		local t1=Saved.Player for k,v in pairs(t1) do pcall(function() t1[k]=Lighting[k] end) end Saved.Player=t1
+		for k,v in pairs(Saved.Player) do pcall(function() Saved.Player[k]=LocalPlayer[k] end) end
 	end
 	if mode=="Humanoid" or mode=="All" then
-		local t2=Saved.Humanoid GetHumanoid(LocalPlayer.Character,function(humanoid) for k,v in pairs(t2) do pcall(function() t2[k]=humanoid[k] end) end end) Saved.Humanoid=t2
+		GetHumanoid(LocalPlayer.Character,function(humanoid) for k,v in pairs(Saved.Humanoid) do pcall(function() Saved.Humanoid[k]=humanoid[k] end) end end)
 	end
 	if mode=="Lighting" or mode=="All" then
-		local t3=Saved.Lighting for k,v in pairs(t3) do pcall(function() t3[k]=Lighting[k] end) end Saved.Lighting=t3
+		for k,v in pairs(Saved.Lighting) do pcall(function() Saved.Lighting[k]=Lighting[k] end) end
 	end
 	if mode=="UI" or mode=="All" then
 		Saved.UI={} for i,v in ipairs(PlayerGui:GetChildren()) do if IsAlive(v) and v.ClassName=="ScreenGui" then if not Saved.UI[v] then Saved.UI[v]={["Enabled"]=v.Enabled} end end end
@@ -3612,9 +3492,6 @@ local function UpdateSaved(mode)
 end
 
 UpdateSaved("All")
-
-Values.MaxZoom=Saved.Player.CameraMaxZoomDistance
-Values.MinZoom=Saved.Player.CameraMinZoomDistance
 
 local UI=CreateUI(CoreGui)
 local MenuFrame=UI.Menu
@@ -3628,35 +3505,24 @@ local CharacterFrame=ButtonScroller.Characters
 local BoostFrame=ButtonScroller.Boosts
 local LightingFrame=ButtonScroller.Lightings
 local ToolFrame=ButtonScroller.Tools
-local ServerInfoScroller=MenuFrame.Pages.ServerInfoScroller
-
-local NotificationGui=CoreGui:FindFirstChild("NotificationGui") or Instance.new("ScreenGui")
-NotificationGui.Name="NotificationGui"
-NotificationGui.ResetOnSpawn=false
-NotificationGui.IgnoreGuiInset=true
-NotificationGui.ZIndexBehavior=Enum.ZIndexBehavior.Sibling
-NotificationGui.Parent=CoreGui
-
-GrabUI(OpenButton)
-GrabUI(MenuFrame)
-
-function GetSuperProductInfo(id)
-	local success,Asset=pcall(function() return MarketplaceService:GetProductInfo(PlaceId) end) if success then return Asset end return nil
-end
-
-local function OpenMenu()
-	MenuFrame.Visible=not MenuFrame.Visible
-	OpenButton.Visible=MenuFrame.Visible~=true
-end
-
-local function CloseMenu()
-	MenuFrame.Visible=false
-	OpenButton.Visible=true
-end
+local InfoScroller=MenuFrame.Pages.InfoScroller
 
 MenuFrame.Visible=false
 OpenButton.Visible=false
 BackButton.Visible=false
+
+GrabUI(OpenButton)
+GrabUI(MenuFrame)
+
+function OpenMenu()
+	MenuFrame.Visible=not MenuFrame.Visible
+	OpenButton.Visible=MenuFrame.Visible~=true
+end
+
+function CloseMenu()
+	MenuFrame.Visible=false
+	OpenButton.Visible=true
+end
 
 OpenButton.MouseButton1Click:Connect(function()
 	OpenMenu()
@@ -3666,22 +3532,28 @@ CloseButton.MouseButton1Click:Connect(function()
 	CloseMenu()
 end)
 
-local function Notify(title:string,description:string,duration:number,color:Color3)
-	duration=tonumber(duration) or 5
-	if typeof(color)~="Color3" then color=Color3.fromRGB(0,170,255) end
-	local spacing=10
-	local notifHeight=60
-	local notifWidth=260
-	local offsetY=20+(#Notifications*(notifHeight+spacing))
+local TextService=game:GetService("TextService")
+
+function UpdateTextSize(label)
+	local c=#label.Text label.TextSize=if c>=90 and c<101 then 0 elseif c>=60 and c<70 then 7 elseif c>=50 and c<60 then 8 elseif c>=10 and c<20 then 10 else 14; label.TextScaled=label.TextSize<=0
+end
+
+function Notify(title,description,duration,color)
+	duration=duration or 5
+	title=title or ""
+	description=description or ""
+	color=color or Color3.fromRGB(0,170,255)
+	local tc,dc,spacing,height,width=#title,#description,10,60,260;
+	local offsetY=20+(#Notifications*(height+spacing))
 	local notification=Instance.new("Frame")
-	notification.Size=UDim2.new(0,notifWidth,0,notifHeight)
-	notification.Position=UDim2.new(1,notifWidth+20,1,-offsetY)
-	notification.AnchorPoint=Vector2.new(1,1)
+	notification.Size=UDim2.new(0,width,0,height)
+	notification.Position=UDim2.new(1,width+20,1,-offsetY)
+	notification.AnchorPoint=Vector2.new(1,1) 
 	notification.BackgroundColor3=Color3.fromRGB(25,25,25)
 	notification.BackgroundTransparency=0
 	notification.ClipsDescendants=true
 	notification.ZIndex=10
-	notification.Parent=NotificationGui
+	notification.Parent=UI
 	local nuic1=Instance.new("UICorner")
 	nuic1.CornerRadius=UDim.new(0,8)
 	nuic1.Parent=notification
@@ -3689,32 +3561,25 @@ local function Notify(title:string,description:string,duration:number,color:Colo
 	tl.Size=UDim2.new(1,-12,0,20)
 	tl.Position=UDim2.new(0,6,0,5)
 	tl.BackgroundTransparency=1
-	tl.Text=title or ""
+	tl.Text=title
 	tl.TextColor3=Color3.new(1,1,1)
 	tl.Font=Enum.Font.GothamBold
-	tl.TextSize=16
+	tl.TextSize=14
 	tl.TextXAlignment=Enum.TextXAlignment.Left
 	tl.ZIndex=11
+	UpdateTextSize(tl)
 	tl.Name="Title"
 	tl.Parent=notification
 	local dl=Instance.new("TextLabel")
 	dl.Size=UDim2.new(1,-12,0,18)
 	dl.Position=UDim2.new(0,6,0,26)
 	dl.BackgroundTransparency=1
-	dl.Text=description or ""
+	dl.Text=description
 	dl.TextColor3=Color3.fromRGB(200,200,200)
-	dl.Font=Enum.Font.Gotham
-	local dc=string.len(description)
-	if dc>=73 then
-		dl.TextSize=0
-	elseif dc>=70  then
-		dl.TextSize=7
-	else
-		dl.TextSize=14
-	end
-	dl.TextScaled=dl.TextSize<=0 and true or false
+	dl.Font=Enum.Font.FredokaOne
 	dl.TextXAlignment=Enum.TextXAlignment.Left
 	dl.ZIndex=11
+	UpdateTextSize(dl)
 	dl.Name="Description"
 	dl.Parent=notification
 	local barContainer=Instance.new("Frame")
@@ -3738,7 +3603,7 @@ local function Notify(title:string,description:string,duration:number,color:Colo
 	TweenService:Create(notification,TweenInfo.new(0.3,Enum.EasingStyle.Sine,Enum.EasingDirection.Out),{Position=UDim2.new(1,-20,1,-offsetY),}):Play()
 	TweenService:Create(bar,TweenInfo.new(duration,Enum.EasingStyle.Linear),{Size=UDim2.new(1,0,1,0)}):Play()
 	task.delay(duration,function()
-		TweenService:Create(notification,TweenInfo.new(0.3,Enum.EasingStyle.Sine,Enum.EasingDirection.In),{Position=notification.Position+UDim2.new(0,notifWidth+20,0,0),}):Play()
+		TweenService:Create(notification,TweenInfo.new(0.3,Enum.EasingStyle.Sine,Enum.EasingDirection.In),{Position=notification.Position+UDim2.new(0,width+20,0,0),}):Play()
 		task.wait(0.3)
 		notification:Destroy()
 		local notificationIndex=table.find(Notifications,notification)
@@ -3747,165 +3612,103 @@ local function Notify(title:string,description:string,duration:number,color:Colo
 		end
 		task.wait(0.2)
 		for i,v in ipairs(Notifications) do
-			local newY=-(20+((i-1)*(notifHeight+spacing)))
+			local newY=-(20+((i-1)*(height+spacing)))
 			TweenService:Create(v,TweenInfo.new(0.2),{Position=UDim2.new(1,-20,1,newY)}):Play()
 		end
 	end)
 end
 
-function toClipboard(txt)
-	if everyClipboard then
-		everyClipboard(tostring(txt))
-		Notify("Clipboard","Copied to clipboard")
-	else
-		Notify("Clipboard","Your exploit doesn't have the ability to use the clipboard")
-	end
-end
-
-local ServerInfoEnabled=false
-local SIPlaceNameConnection,SIPlaceIdConnection,SIPlayerNameConnection,SIPlayerIdConnection,SIAppearanceConnection=nil,nil,nil,nil,nil;
-local SILoopThread=nil
 
 function GetSelectInfoOrLocalPlayer()
 	if next(SelectInfo) then return SelectInfo else if IsAlive(LocalPlayer) then  return LocalPlayer end end return {["Name"]="Loading",["UserId"]=-1,["CharacterAppearanceId"]=-1}
 end
 
-function ClearServerInfo()
-	if ServerInfoEnabled then
-		ServerInfoEnabled=false
-		Cleanup(SIPlaceNameConnection) SIPlaceNameConnection=nil
-		Cleanup(SIPlaceIdConnection) SIPlaceIdConnection=nil 
-		Cleanup(SIPlayerNameConnection) SIPlayerNameConnection=nil 
-		Cleanup(SIPlayerIdConnection) SIPlayerIdConnection=nil 
-		Cleanup(SIAppearanceConnection) SIAppearanceConnection=nil
-		Cleanup(SILoopThread) SILoopThread=nil
-		ServerInfoScroller.Visible=false
-	end
-end
-
-function OpenServerInfo(enabled)
+function OpenInfo(enabled)
 	if enabled then
-		if ServerInfoEnabled then return end ServerInfoEnabled=true
-		
-		warn("Server Info 1")
-		local Asset=GetSuperProductInfo(PlaceId)
-		local placeName=""
-		if Asset then
-			placeName=Asset.Name
-		else
-			if workspace.Parent then placeName=workspace.Parent.Name end
-		end
-		warn("Server Info 2")
-		ServerInfoScroller.MaxPlayerLabel.Text=tostring(Players.MaxPlayers).." Max Players"
-		ServerInfoScroller.PlaceNames.Title.Text=`Place Name: {placeName}`
-		ServerInfoScroller.PlaceIds.Title.Text=`Place Id: {PlaceId}`
-
-		Cleanup(SIPlaceNameConnection) SIPlaceNameConnection=nil
-		SIPlaceNameConnection=ServerInfoScroller.PlaceNames.Copy.MouseButton1Click:Connect(function()
-			Asset=GetSuperProductInfo(PlaceId)
-			if Asset then 
-				placeName=Asset.Name
-			else
-				if workspace.Parent then placeName=workspace.Parent.Name end
-			end
-			ServerInfoScroller.PlaceNames.Title.Text=`Place Name: {placeName}` 
-			toClipboard(placeName)
+		if InfoEnabled then return end InfoEnabled=true
+		local maxPlayers,placeName,userId,userName,appearanceId;
+		InfoScroller.PlaceIds.Title.Text=`Place Id: {PlaceId}`
+		Cleanup(SIPlaceNamePressed)
+		SIPlaceNamePressed=InfoScroller.PlaceNames.Copy.MouseButton1Click:Connect(function()
+			if placeName then toClipboard(placeName) end
 		end)
-
-		Cleanup(SIPlaceIdConnection) SIPlaceIdConnection=nil
-		SIPlaceIdConnection=ServerInfoScroller.PlaceIds.Copy.MouseButton1Click:Connect(function()
-			ServerInfoScroller.PlaceIds.Title.Text=`Place Id: {PlaceId}`
+		Cleanup(SIPlaceIdPressed)
+		SIPlaceIdPressed=InfoScroller.PlaceIds.Copy.MouseButton1Click:Connect(function()
 			toClipboard(tostring(PlaceId))
 		end)
-
-		Cleanup(SIPlayerNameConnection) SIPlayerNameConnection=nil
-		SIPlayerNameConnection=ServerInfoScroller.PlayerNames.Copy.MouseButton1Click:Connect(function()
-			local player=GetSelectInfoOrLocalPlayer()
-			if player then
-				ServerInfoScroller.PlayerNames.Title.Text=`Player Name: {player.Name}`
-				toClipboard(player.Name)
-			end
+		Cleanup(SIPlayerNamePressed)
+		SIPlayerNamePressed=InfoScroller.PlayerNames.Copy.MouseButton1Click:Connect(function()
+			if userName then toClipboard(userName) end
 		end)
-
-		Cleanup(SIPlayerIdConnection) SIPlayerIdConnection=nil
-		SIPlayerIdConnection=ServerInfoScroller.PlayerIds.Copy.MouseButton1Click:Connect(function()
-			local player=GetSelectInfoOrLocalPlayer()
-			if player then
-				ServerInfoScroller.PlayerIds.Title.Text=`Player Id: {player.UserId}`
-				toClipboard(player.UserId)
-			end
+		Cleanup(SIPlayerIdPressed)
+		SIPlayerIdPressed=InfoScroller.PlayerIds.Copy.MouseButton1Click:Connect(function()
+			if userId then toClipboard(userId) end
 		end)
-
-		Cleanup(SIAppearanceConnection) SIAppearanceConnection=nil
-		SIAppearanceConnection=ServerInfoScroller.Appearances.Copy.MouseButton1Click:Connect(function()
-			if IsAlive(LocalPlayer) then
-				ServerInfoScroller.Appearances.Title.Text=`Appearance: {LocalPlayer.CharacterAppearanceId}`
-				toClipboard(LocalPlayer.CharacterAppearanceId)
-			end
+		Cleanup(SIAppearancePressed)
+		SIAppearancePressed=InfoScroller.Appearances.Copy.MouseButton1Click:Connect(function()
+			if appearanceId then toClipboard(tostring(appearanceId)) end
 		end)
-
-		Cleanup(SILoopThread) SILoopThread=nil
+		Cleanup(SILoopThread)
 		SILoopThread=coroutine.create(function()
-			while ServerInfoEnabled do
-				ServerInfoScroller.PlayersLabel.Text=`{#PlayerList} Players`
-
-				local seconds = math.floor(workspace.DistributedGameTime)
-				local minutes = math.floor(workspace.DistributedGameTime / 60)
-				local hours = math.floor(workspace.DistributedGameTime / 60 / 60)
-				local seconds = seconds - (minutes * 60)
-				local minutes = minutes - (hours * 60)
-
-				if hours < 1 then 
-					if minutes < 1 then
-						ServerInfoScroller.ServerTimeLabel.Text = seconds .. " Second(s)" 
+			while InfoEnabled do
+				local Asset=GetProductInfo(PlaceId)
+				if Asset then placeName=Asset.Name else if workspace.Parent then placeName=workspace.Parent.Name end end
+				InfoScroller.PlaceNames.Title.Text=`Place Name: {placeName}`
+				InfoScroller.PlayersLabel.Text=`{#PlayerList} Players`
+				maxPlayers=Players.MaxPlayers
+				InfoScroller.MaxPlayerLabel.Text=tostring(maxPlayers).." Max Players"
+				local distributedGameTime=workspace.DistributedGameTime
+				local seconds=math.floor(distributedGameTime)
+				local minutes=math.floor(distributedGameTime/60)
+				local hours=math.floor(distributedGameTime/60/60)
+				local seconds=seconds-(minutes*60)
+				local minutes=minutes-(hours*60)
+				if hours<1 then 
+					if minutes<1 then
+						InfoScroller.ServerTimeLabel.Text=seconds.." Second(s)" 
 					else
-						ServerInfoScroller.ServerTimeLabel.Text = minutes .. " Minute(s), " .. seconds .. " Second(s)"
+						InfoScroller.ServerTimeLabel.Text=minutes.." Minute(s), "..seconds.." Second(s)"
 					end
 				else
-					ServerInfoScroller.ServerTimeLabel.Text = hours .. " Hour(s), " .. minutes .. " Minute(s), " .. seconds .. " Second(s)"
+					InfoScroller.ServerTimeLabel.Text=hours.." Hour(s), " ..minutes.." Minute(s), "..seconds.." Second(s)"
 				end
-
+				if IsAlive(LocalPlayer) then appearanceId=LocalPlayer.CharacterAppearanceId InfoScroller.Appearances.Title.Text=`Appearance: {appearanceId}` end
 				local player=GetSelectInfoOrLocalPlayer()
-				if player then
-					ServerInfoScroller.PlayerNames.Title.Text=`Player Name: {player.Name}`
-					ServerInfoScroller.PlayerIds.Title.Text=`Player Id: {player.UserId}`
-				end
-				
-				if IsAlive(LocalPlayer) then
-					ServerInfoScroller.Appearances.Title.Text=`Appearance: {LocalPlayer.CharacterAppearanceId}`
-				end
+				if player then userName=player.Name userId=player.UserId InfoScroller.PlayerNames.Title.Text=`Player Name: {userName}` InfoScroller.PlayerIds.Title.Text=`Player ID: {userId}` end
 				task.wait(1)
 			end
 		end)
 		coroutine.resume(SILoopThread)
-		
-		warn("Server Info 9")
-		MenuFrame.Visible=true
-		OpenButton.Visible=MenuFrame.Visible~=true
-		ButtonScroller.Visible=false
-		ServerInfoScroller.Visible=true
-		BackButton.Visible=true
-		warn("Server Info 10")
+		task.delay(0.25,function()
+			MenuFrame.Visible=true
+			OpenButton.Visible=MenuFrame.Visible~=true
+			ButtonScroller.Visible=false
+			InfoScroller.Visible=true
+			BackButton.Visible=true
+		end)
 	else
-		if ServerInfoEnabled then
-			ClearServerInfo()
-			ButtonScroller.Visible=true
-			BackButton.Visible=false
-		end
+		if not InfoEnabled then return end
+		InfoEnabled=false
+		SIPlaceNamePressed,SIPlaceIdPressed,SIPlayerIdPressed,SIAppearancePressed,SILoopThread=ClearCache({SIPlaceNamePressed,SIPlaceIdPressed,SIPlayerIdPressed,SIAppearancePressed,SILoopThread})
+		InfoScroller.Visible=false
+		ButtonScroller.Visible=true
+		BackButton.Visible=false
 	end
+	ToolFrame.InfoButton.Text=(enabled and "Close" or "Open").." Info"
+	Notify("Info",enabled and "Open information" or "Close information")
 end
 
 BackButton.MouseButton1Click:Connect(function()
-	ClearServerInfo()
+	OpenInfo(false)
 	ButtonScroller.Visible=true
 	BackButton.Visible=false
 end)
 
-local function NotifyWarn(title:string,description:string,duration:number)
+function NotifyWarn(title:string,description:string,duration:number)
 	Notify(title,description,duration,Color3.fromRGB(255,170,0))
 end
 
-local function NotifyPlayer(title,player)
+function NotifyPlayer(title,player)
 	if not IsAlive(player) then
 		NotifyWarn(title,"Player not found")
 	else
@@ -3913,7 +3716,7 @@ local function NotifyPlayer(title,player)
 	end
 end
 
-local function CreateTool(name,parent)
+function CreateTool(name,parent)
 	local tool=Instance.new("Tool")
 	tool.Name=name
 	tool.CanBeDropped=false
@@ -3923,7 +3726,7 @@ local function CreateTool(name,parent)
 	return tool
 end
 
-local function StopFreeCamera()
+function StopFreeCamera()
 	pcall(function()
 		Input.StopCapture()
 		RunService:UnbindFromRenderStep("Freecam")
@@ -3938,7 +3741,7 @@ function PreviousValue(t,i)
 	if i==0 or i==1 then i=#t else i=i-1 end if not t[i] then i=i-1 end if not t[i] then i=#t end return i,t[i]
 end
 
-local function AddCommand(names,description,func)
+function AddCommand(names,func)
 	for i,Name in ipairs(names) do
 		Commands[#Commands+1]={
 			Name=Name;
@@ -3947,11 +3750,11 @@ local function AddCommand(names,description,func)
 	end
 end
 
-local function GetIndicators(instance,s)
+function GetIndicators(instance,s)
 	local results={} local children=instance:GetChildren() for i=1,#children do local v=instance:FindFirstChild(`{s}{i}`) if v then results[#results+1]=v end end return results
 end
 
-local function UpdateBarUI(arrows,index,limit,bars)
+function UpdateBarUI(arrows,index,limit,bars)
 	local arrowLeft=arrows[1]
 	local arrowRight=arrows[2]
 	arrowLeft.Visible=index>0
@@ -3964,7 +3767,7 @@ local function UpdateBarUI(arrows,index,limit,bars)
 	end
 end
 
-local function ExecuteCommand(name)
+function ExecuteCommand(name)
 	if type(name)~="string" then return end
 	if #name<=0 then return end
 	local args={}
@@ -3998,81 +3801,75 @@ local function ExecuteCommand(name)
 	end
 end
 
-local function View(player)
+function View(player)
 	if not ViewEnabled then return end
 	ViewInstance=player
-	Cleanup(ViewCharAddedConnection) ViewCharAddedConnection=nil
 	LocalCamera.CameraSubject=player.Character
-	ViewCharAddedConnection=player.CharacterAdded:Connect(function()
+	Cleanup(ViewCharAdded)
+	ViewCharAdded=player.CharacterAdded:Connect(function()
 		View(player)
 	end)
 end
 
-local function Unview(message)
+function Unview(message)
 	ViewEnabled=false
 	ViewInstance=nil
-	Cleanup(ViewCharAddedConnection) ViewCharAddedConnection=nil
+	ViewCharAdded=Cleanup(ViewCharAdded)
 	StopFreeCamera()
 	SelectPlayerFrame.Views.Button.Text="View"
-	LocalCamera.CameraSubject=LocalPlayer.Character
+	LocalCamera.CameraSubject=LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
 	Notify("Spectate",message)
 end
 
-local function FixCamera(message)
-	if message then
-		Notify("Restore Camera",message)
-	end
+function FixCamera(message)
+	if message then Notify("Restore Camera",message) 	end
 	Unview("View turned off (fix camera)")
 	StopFreeCamera()
-	local char=LocalPlayer.Character
-	LocalCamera.CameraSubject=char
+	LocalCamera.CameraSubject=LocalPlayer.Character
 	SetSaved("Player")
-	GetHeadPart(char,function(v) v.Anchored=false end)
 end
 
-local function EnableMaxZoom(no,player,s)
+function EnableMaxZoom(no,player,s)
 	Values.MaxZoom=Strs.GetNumber(s,Saved.Player.CameraMaxZoomDistance) or Values.MaxZoom
 	player.CameraMaxZoomDistance=Values.MaxZoom
 	if no==1 or no==0 then
-		local enabled=no==1
-		MaxZoomEnabled=enabled
-		Cleanup(MaxZoomThread) MaxZoomThread=nil
-		if enabled then
+		warn(s)
+		MaxZoomEnabled=no==1
+		MaxZoomThread=Cleanup(MaxZoomThread)
+		if no==1 then
 			MaxZoomThread=coroutine.create(function()
-				while MaxZoomEnabled do
-					if not IsAlive(player) then EnableMaxZoom(0,player,s) return end
+				while MaxZoomEnabled and IsAlive(player) do
 					player.CameraMaxZoomDistance=Values.MaxZoom
 					task.wait()
 				end
+				EnableMaxZoom(0,player,s)
 			end)
 			coroutine.resume(MaxZoomThread)
 		end
-		Notify("Max Zoom","Max Zoom "..TurnTexts[enabled])
+		Notify("Max Zoom","Max Zoom "..TurnTexts[no==1])
 	end
 end
 
-local function EnableMinZoom(no,player,s)
+function EnableMinZoom(no,player,s)
 	Values.MinZoom=Strs.GetNumber(s,Saved.Player.CameraMinZoomDistance) or Values.MinZoom
 	player.CameraMinZoomDistance=Values.MinZoom
 	if no==1 or no==0 then
-		local enabled=no==1
-		MinZoomEnabled=enabled
-		Cleanup(MinZoomThread) MinZoomThread=nil
-		if enabled then
+		MinZoomEnabled=no==1
+		MinZoomThread=Cleanup(MinZoomThread)
+		if no==1 then
 			MinZoomThread=coroutine.create(function()
-				while MinZoomEnabled do
-					if not IsAlive(player) then EnableMaxZoom(0,player,s) return end
-					player.CameraMaxZoomDistance=Values.MaxZoom
+				while MinZoomEnabled and IsAlive(player) do
+					player.CameraMinZoomDistance=Values.MinZoom
 					task.wait()
 				end
 			end)
 			coroutine.resume(MinZoomThread)
 		end
-		Notify("Min Zoom","Min Zoom "..TurnTexts[enabled])
+		Notify("Min Zoom","Min Zoom "..TurnTexts[no==1])
 	end
 end
 
-local function EnableInvisible(enabled,player)
+function EnableInvisible(enabled,player)
 	if enabled then
 		local char=player.Character
 		if IsAlive(char) then
@@ -4091,7 +3888,7 @@ local function EnableInvisible(enabled,player)
 							task.wait()
 							char.Parent=workspace
 							GetHumanoid(player.Character,function(newHumanoid) newHumanoid:Destroy() end)
-							TurnVisibleFunc()
+							TurnVisible()
 						end)
 					else
 						pcall(function()
@@ -4105,8 +3902,8 @@ local function EnableInvisible(enabled,player)
 						end)
 					end
 				end
-				local invisibleLoopConnection;
-				invisibleLoopConnection=RunService.Stepped:Connect(function()
+				local invisibleLooped,invisibleDied;
+				invisibleLooped=RunService.Stepped:Connect(function()
 					pcall(function()
 						local isInteger
 						if string.find(tostring(voidHeight),"-") then
@@ -4127,26 +3924,10 @@ local function EnableInvisible(enabled,player)
 						end
 					end)
 				end)
-				local invisibleDiedConnection;
-				local invisibleHealthConnection;
-				local invisibleMaxHealthConnection;
-				GetHumanoid(fakeChar,function(fakeHumanoid)
-					invisibleDiedConnection=fakeHumanoid.Died:Connect(function()
-						ExecuteCommand("visible")
-					end)
-					invisibleHealthConnection=fakeHumanoid:GetPropertyChangedSignal("Health"):Connect(function()
-						if fakeHumanoid.Health<=0 then
-							ExecuteCommand("visible")
-						end
-					end)
-					invisibleMaxHealthConnection=fakeHumanoid:GetPropertyChangedSignal("Health"):Connect(function()
-						if fakeHumanoid.MaxHealth<=0 then
-							ExecuteCommand("visible")
-						end
-					end)
+				invisibleDied=RunService.RenderStepped:Connect(function()
+					if isInvisible and IsDied(fakeChar) and TurnVisible then TurnVisible() end
 				end)
-				if isInvisible then return end
-				isInvisible=true
+				if isInvisible then return end isInvisible=true
 				for i,v in pairs(fakeChar:GetDescendants()) do if v:IsA("BasePart") then if v.Name=="HumanoidRootPart" then v.Transparency=1 else v.Material=Enum.Material.Neon v.Transparency=0.5 end end end
 				PlayerState.Push()
 				local cf=char:GetPivot()
@@ -4161,12 +3942,9 @@ local function EnableInvisible(enabled,player)
 				FixCamera()
 				fakeChar:FindFirstChild("Animate").Enabled=false
 				fakeChar:FindFirstChild("Animate").Enabled=true
-				TurnVisibleFunc=function()
+				TurnVisible=function()
 					pcall(function()
-						Cleanup(invisibleLoopConnection)
-						Cleanup(invisibleDiedConnection)
-						Cleanup(invisibleHealthConnection)
-						Cleanup(invisibleMaxHealthConnection)
+						ClearCache({invisibleLooped,invisibleDied})
 						local cf3=player.Character:GetPivot()
 						char:PivotTo(cf3)
 						GetRootPart(char).CFrame=cf3
@@ -4177,6 +3955,7 @@ local function EnableInvisible(enabled,player)
 						InvisibleEnabled=false
 						CharacterFrame.InvisibleToggle.Turns.BackgroundColor3=TurnColors[false]
 						Notify("Invisible","Invisible Disabled")
+						TurnVisible=nil
 					end)
 				end
 				CharacterFrame.InvisibleToggle.Turns.BackgroundColor3=TurnColors[true]
@@ -4184,7 +3963,7 @@ local function EnableInvisible(enabled,player)
 			end
 		end
 	else
-		if not TurnVisibleFunc then return end TurnVisibleFunc() TurnVisibleFunc=nil
+		if TurnVisible then TurnVisible() TurnVisible=nil end 
 	end
 end
 
@@ -4192,7 +3971,7 @@ function RemoveESP(userId)
 	Cleanup(ESPCache[userId]) ESPCache[userId]=nil
 end
 
-local function ESP(player)
+function ESP(player)
 	task.spawn(function()
 		if player.UserId==LocalPlayer.UserId then return end
 		if not (ESPEnabled and IsAlive(player)) then return end
@@ -4302,7 +4081,7 @@ local function ESP(player)
 	end)
 end
 
-local function EnableESP(enabled)
+function EnableESP(enabled)
 	if enabled then
 		if ESPEnabled then return end ESPEnabled=true
 		for i,player in ipairs(Players:GetPlayers()) do ESP(player) end
@@ -4322,7 +4101,7 @@ function RemoveESPNPC(value)
 	end
 end
 
-local function ESPNPC(npc)
+function ESPNPC(npc)
 	task.spawn(function()
 		if not ESPNPCEnabled or IsDied(npc) then return end
 		if ESPNPCCache[npc] then return end
@@ -4400,7 +4179,7 @@ local function ESPNPC(npc)
 	end)
 end
 
-local function EnableESPNPC(enabled)
+function EnableESPNPC(enabled)
 	if enabled then
 		if ESPNPCEnabled then return end ESPNPCEnabled=true
 		for i,npc in ipairs(NPCList) do ESPNPC(npc) end
@@ -4412,32 +4191,31 @@ local function EnableESPNPC(enabled)
 	Notify("ESP NPC","ESP NPC "..TurnTexts[enabled])
 end
 
-local function EnableAntiFling(enabled)
+function EnableAntiFling(enabled)
 	AntiFlingEnabled=enabled
-	Cleanup(AntiFlingCharAddedConnection) AntiFlingCharAddedConnection=nil
-	Cleanup(AntiFlingAddedConnection) AntiFlingAddedConnection=nil
+	ClearCache({AntiFlingCharAdded,AntiFlingAdded})
 	if enabled then
 		local player=LocalPlayer
 		repeat task.wait() until not (AntiFlingEnabled and IsAlive(player)) or GetCharacter(player.Character)~=nil
 		if not (AntiFlingEnabled and IsAlive(player)) then return end
 		local char=player.Character
-		local function AntiFlingCharAdded()
+		local function OnAntiFlingCharAdded()
 			EnableAntiFling(enabled)
 		end
-		AntiFlingCharAddedConnection=player.CharacterAdded:Connect(AntiFlingCharAdded)
-		local function AntiFlingObjectAdded(child)
+		AntiFlingCharAdded=player.CharacterAdded:Connect(OnAntiFlingCharAdded)
+		local function OnAntiFlingObjectAdded(child)
 			if not (AntiFlingEnabled and IsFling(child)) then return end
 			task.spawn(function() SetPartAnchoredChildren(char,true) task.delay(0.25,function() SetPartAnchoredChildren(char,false) end) end)
 			task.spawn(function() if IsAlive(child.Parent) then for i,v in ipairs(child.Parent:GetChildren()) do if IsFling(v) then v:Destroy() end end end end)
 			task.spawn(function() GetHumanoid(char,function(v) v:ChangeState(Enum.HumanoidStateType.Seated) task.delay(0.5,function() v:ChangeState(Enum.HumanoidStateType.Jumping) end) end) end)
 		end
-		AntiFlingAddedConnection=char.DescendantAdded:Connect(AntiFlingObjectAdded)
+		AntiFlingAdded=char.DescendantAdded:Connect(OnAntiFlingObjectAdded)
 	end
 	CharacterFrame.AntiFlingToggle.Turns.BackgroundColor3=TurnColors[enabled]
 	Notify("Anti Fling","Anti Fling "..TurnTexts[enabled])
 end
 
-local function EnableWalkSpeed(no,player,s)
+function EnableWalkSpeed(no,player,s)
 	Values.WalkSpeed=Strs.GetNumber(s,Saved.Humanoid.WalkSpeed or 16) or Values.WalkSpeed
 	SetHumanoid(player.Character,{["WalkSpeed"]=Values.WalkSpeed})
 	if no==1 or no==0 then
@@ -4457,7 +4235,7 @@ local function EnableWalkSpeed(no,player,s)
 	end
 end
 
-local function EnableHealth(no,player,s)
+function EnableHealth(no,player,s)
 	Values.Health=Strs.GetNumber(s,Saved.Humanoid.MaxHealth or 100) or Values.Health
 	SetHumanoid(player.Character,{["MaxHealth"]=Values.Health,["Health"]=Values.Health})
 	if no==1 or no==0 then
@@ -4477,36 +4255,35 @@ local function EnableHealth(no,player,s)
 	end
 end
 
-local function GetJump(useJumpPower,s)
+function GetJump(useJumpPower,s)
 	if Strs.IsOriginal(s) then return useJumpPower and (Saved.Humanoid.JumpPower or 50) or (Saved.Humanoid.JumpHeight or 28.634) else return tonumber(s) end
 end
 
-local function EnableJump(no,player,s)
+function EnableJump(no,player,s)
 	local jumpName="JumpPower"
-	GetHumanoid(player.Character,function(v) local useJumpPower=v.UseJumpPower jumpName=useJumpPower and "JumpPower" or "JumpHeight" Values.Jump=GetJump(s,useJumpPower) or Values.Jump v[jumpName]=Values.Jump end)
+	GetHumanoid(player.Character,function(humanoid) jumpName=humanoid.UseJumpPower and "JumpPower" or "JumpHeight" Values.Jump=GetJump(humanoid.UseJumpPower,s) or Values.Jump humanoid[jumpName]=Values.Jump end)
 	if no==1 or no==0 then
-		local enabled=no==1
-		Cleanup(JumpThread) JumpThread=nil
-		JumpEnabled=enabled
-		if enabled then
+		JumpThread=Cleanup(JumpThread)
+		JumpEnabled=no==1
+		if no==1 then
 			JumpThread=coroutine.create(function()
 				while JumpEnabled do
-					GetHumanoid(player.Character,function(v) v[v.UseJumpPower and "JumpPower" or "JumpHeight"]=Values.Jump end)
+					GetHumanoid(player.Character,function(humanoid) humanoid[humanoid.UseJumpPower and "JumpPower" or "JumpHeight"]=Values.Jump end)
 					task.wait()
 				end
 			end)
 			coroutine.resume(JumpThread)
 		end
-		Notify("Jump",jumpName.." "..TurnTexts[enabled])
+		Notify("Jump",jumpName.." "..TurnTexts[no==1])
 	end
 end
 
-local function EnableNoclip(enabled,player)
+function EnableNoclip(enabled,player)
 	NoclipEnabled=enabled
-	Cleanup(NoclipConnection) NoclipConnection=nil
+	NoclipLooped=Cleanup(NoclipLooped)
 	if enabled then
 		Saved.Collisions={}
-		NoclipConnection=RunService.Stepped:Connect(function()
+		NoclipLooped=RunService.Stepped:Connect(function()
 			local char=player.Character
 			if not IsAlive(char) then return end
 			for i,v in ipairs(char:GetDescendants()) do if IsAlive(v) and v:IsA("BasePart") then if Saved.Collisions[v]==nil  then Saved.Collisions[v]=v.CanCollide end v.CanCollide=false end end
@@ -4520,33 +4297,31 @@ local function EnableNoclip(enabled,player)
 	Notify("Noclip","Noclip "..TurnTexts[enabled])
 end
 
-local function EnableFollow(enabled,s)
-	Cleanup(FollowLoopConnection) FollowLoopConnection=nil
+function EnableFollow(enabled,s)
 	FollowEnabled=enabled
+	FollowLooped=Cleanup(FollowLooped)
 	if enabled then
 		local player=GetPlayer(s)
 		if not IsAlive(player) or player.UserId==LocalPlayer.UserId then NotifyPlayer("Follow",player) return end
-		FollowLoopConnection=RunService.RenderStepped:Connect(function()
+		local char,otherChar,rootPart,otherRootPart=LocalPlayer.Character,player.Character,nil,nil
+		FollowLooped=RunService.RenderStepped:Connect(function()
 			if not FollowEnabled then return end
-			local char=GetCharacter(LocalPlayer.Character)
-			local otherChar=GetCharacter(player.Character)
-			if not IsAlive(char) or not IsAlive(otherChar) then return end
-			local rootPart=GetRootPart(char)
-			local targetRootPart=GetRootPart(otherChar)
-			if not IsAlive(rootPart) or IsAlive(targetRootPart) then return end
-			local distance=(rootPart.Position-targetRootPart.Position).Magnitude
+			if IsAlive(LocalPlayer) then if char~=LocalPlayer.Character then char=LocalPlayer.Character end else return end
+			if IsAlive(player) and otherChar~=player.Character then otherChar=player.Character end
+			if not (IsAlive(char) and IsAlive(otherChar)) then return end
+			rootPart,otherRootPart=GetRootPart(char),GetRootPart(otherChar)
+			if not (IsAlive(rootPart) and IsAlive(otherRootPart)) then return end
+			local distance=(rootPart.Position-otherRootPart.Position).Magnitude
 			distance=math.floor(distance)
 			if distance<=3 then return end
-			local humanoid=GetHumanoid(char)
-			if not IsAlive(humanoid) then return end
-			humanoid:MoveTo(targetRootPart.Position)
+			GetHumanoid(char,function(humanoid) humanoid:MoveTo(otherRootPart.Position) end)
 		end)
 	end
 	CharacterFrame.FollowToggle.Turns.BackgroundColor3=TurnColors[enabled]
 	Notify("Follow","Follow "..TurnTexts[enabled])
 end
 
-local function Goto(s)
+function Goto(s)
 	local player=GetPlayer(s)
 	if not IsAlive(player) then NotifyPlayer("Goto",player) return end
 	local char=LocalPlayer.Character
@@ -4557,17 +4332,14 @@ local function Goto(s)
 	char:MoveTo(otherRootPart.Position+Vector3.new(3,1,0))
 end
 
-local function EnableSpin(no,player,s)
+function EnableSpin(no,player,s)
 	Values.SpinSpeed=Strs.GetNumber(s,Saved.Values.SpinSpeed) or Values.SpinSpeed
 	if no==1 or no==0 then
-		local enabled=no==1
-		SpinEnabled=enabled
-		Cleanup(SpinInstance) SpinInstance=nil 
-		Cleanup(SpinCharAddedConnection) SpinCharAddedConnection=nil 
-		Cleanup(SpinThread) SpinThread=nil
+		SpinEnabled=no==1
+		SpinInstance,SpinCharAdded,SpinThread=ClearCache({SpinInstance,SpinCharAdded,SpinThread})
 		local char=player.Character
 		if not IsAlive(char) then return end
-		if enabled then
+		if no==1 then
 			local rootPart=GetRootPart(char)
 			if not rootPart then return end
 			ExecuteCommand("noclip")
@@ -4580,7 +4352,7 @@ local function EnableSpin(no,player,s)
 			SpinInstance.P=math.huge
 			local children=char:GetChildren()
 			for i,v in next,children do if v:IsA("BasePart") then v.CanCollide=false v.Massless=true pcall(function() v["Velocity"]=Vector3.new(0,0,0) end) end end
-			SpinCharAddedConnection=player.CharacterAdded:Connect(function()
+			SpinCharAdded=player.CharacterAdded:Connect(function()
 				EnableSpin(0,player,s)
 			end)
 			local function SetSpinInstanceSpeed(n) if IsAlive(SpinInstance) then SpinInstance.AngularVelocity=Vector3.new(0,n,0) end end
@@ -4597,12 +4369,12 @@ local function EnableSpin(no,player,s)
 			ExecuteCommand("clip")
 			for i,v in ipairs(char:GetDescendants()) do if IsAlive(v) and v.ClassName=="Part" or v.ClassName=="MeshPart" then v.CustomPhysicalProperties=PhysicalProperties.new(0.7,0.3,0.5) end end
 		end
-		CharacterFrame.SpinToggle.Turns.BackgroundColor3=TurnColors[enabled]
-		Notify("Spin/Fling","Spin/Fling "..TurnTexts[enabled])
+		CharacterFrame.SpinToggle.Turns.BackgroundColor3=TurnColors[no==1]
+		Notify("Spin/Fling","Spin/Fling "..TurnTexts[no==1])
 	end
 end
 
-local function EnableFly(no,player,s)
+function EnableFly(no,player,s)
 	Values.FlySpeed=Strs.GetNumber(s,Saved.Values.FlySpeed) or Values.FlySpeed
 	if no==1 or no==0 then
 		local enabled=no==1
@@ -4682,13 +4454,13 @@ local function EnableFly(no,player,s)
 	end
 end
 
-local function ApplyAnimationSpeed(model,speed)
+function ApplyAnimationSpeed(model,speed)
 	GetHumanoid(model,function(humanoid)
 		local animator=humanoid:FindFirstChildOfClass("Animator")
 		if animator then
 			for k,v in pairs(animator:GetPlayingAnimationTracks()) do
 				if IdleAnimEnabled then
-					if v.MoveDirection.Magnitude==0 then
+					if humanoid.MoveDirection.Magnitude<=0 then
 						v:AdjustSpeed(speed)
 					else
 						v:AdjustSpeed(1)
@@ -4701,12 +4473,11 @@ local function ApplyAnimationSpeed(model,speed)
 	end)
 end
 
-local function EnableBoostAnim(no,player,s)
+function EnableBoostAnim(no,player,s)
 	Values.AnimSpeed=Strs.GetNumber(s,Saved.Values.AnimSpeed) or Values.AnimSpeed
 	if no==1 or no==0 then
-		local enabled=no==1
-		BoostAnimEnabled=enabled
-		Cleanup(BoostAnimThread) BoostAnimThread=nil
+		BoostAnimEnabled=no==1
+		BoostAnimThread=Cleanup(BoostAnimThread)
 		if enabled then
 			BoostAnimThread=coroutine.create(function()
 				while BoostAnimEnabled do
@@ -4718,12 +4489,12 @@ local function EnableBoostAnim(no,player,s)
 		else
 			ApplyAnimationSpeed(player.Character,1)
 		end
-		CharacterFrame.BoostAnimToggle.Turns.BackgroundColor3=TurnColors[enabled]
-		Notify("Boost Animation","Boost Animation "..TurnTexts[enabled])
+		CharacterFrame.BoostAnimToggle.Turns.BackgroundColor3=TurnColors[no==1]
+		Notify("Boost Animation","Boost Animation "..TurnTexts[no==1])
 	end
 end
 
-local function CreateAndPlayDanceAnimation(humanoid,animationId)
+function CreateAndPlayDanceAnimation(humanoid,animationId)
 	DanceInstance=Instance.new("Animation")
 	DanceInstance.AnimationId=animationId
 	DanceAnimTrack=humanoid:LoadAnimation(DanceInstance)
@@ -4731,7 +4502,7 @@ local function CreateAndPlayDanceAnimation(humanoid,animationId)
 	DanceAnimTrack:Play()
 end
 
-local function EnableDance(enabled,player)
+function EnableDance(enabled,player)
 	if DanceAnimTrack then DanceAnimTrack:Stop() DanceAnimTrack:Destroy() DanceAnimTrack=nil end
 	if DanceInstance then DanceInstance:Destroy() DanceInstance=nil end
 	if enabled then
@@ -4748,7 +4519,7 @@ local function EnableDance(enabled,player)
 	end
 end
 
-local function GetNearest(mode,range)
+function GetNearest(mode,range)
 	local userId=LocalPlayer.UserId
 	local value,lastDistance=nil,math.huge
 	local characters={}
@@ -4772,7 +4543,6 @@ local function GetNearest(mode,range)
 			table.insert(characters,char)
 		end
 	else
-		warn("Something wrong")
 		return value,lastDistance
 	end
 	for i,char in ipairs(characters) do
@@ -4792,7 +4562,7 @@ local function GetNearest(mode,range)
 	return value,lastDistance
 end
 
-local function EnableAim(no,player,s1,s2,s3)
+function EnableAim(no,player,s1,s2,s3)
 	if s1 then s1=string.lower(s1) if Strs.IsOriginal(s1) then s1=Saved.Values.AimType else if s1=="player" then s1="Player" elseif s1=="npc" then s1="NPC" elseif s1=="all" then s1="All" else s1=nil end end end
 	if s2 then s2=string.lower(s2) if Strs.IsOriginal(s2) then s2=Saved.Values.AimTargetType else if s2=="head" then s2="Head" elseif s2=="root" then s2="Root" else s2=nil end end end
 	Values.AimType=s1 or Values.AimType
@@ -4821,16 +4591,15 @@ local function EnableAim(no,player,s1,s2,s3)
 				return
 			end
 			AimEnabled=true
-			Cleanup(AimConnection) AimConnection=nil
+			AimLooped=Cleanup(AimLooped)
 			AimInstance=nil
-			AimConnection=RunService.RenderStepped:Connect(function()
-				if not IsAlive(player) then Cleanup(AimConnection) AimConnection=nil AimEnabled=false return end
+			AimLooped=RunService.RenderStepped:Connect(function()
+				if not IsAlive(player) then AimLooped=Cleanup(AimLooped) AimEnabled=false return end
 				if not AimEnabled then return end
 				local char=player.Character
 				if IsDied(char) then return end
 				local rootPart=GetRootPart(char)
 				if not rootPart then return end
-
 				if IsDied(AimInstance) then
 					AimInstance=GetNearest(Values.AimType,Values.AimRange)
 				end
@@ -4861,19 +4630,19 @@ local function EnableAim(no,player,s1,s2,s3)
 			end)
 		else
 			AimEnabled=false
-			Cleanup(AimConnection) AimConnection=nil
+			AimLooped=Cleanup(AimLooped)
 			LocalCamera.CameraSubject=player.Character or player.CharacterAdded:Wait()
 			LocalCamera.CameraType=Enum.CameraType.Custom
 			AimInstance=nil
 		end
-		local enabled=AimEnabled
-		CharacterFrame.AimlockToggle.Turns.BackgroundColor3=TurnColors[enabled]
-		Notify("Aimlock","Aim lock turning "..(enabled and "on" or "off"))
+		CharacterFrame.AimlockToggle.Turns.BackgroundColor3=TurnColors[no==1]
+		Notify("Aimlock","Aim lock turning "..(no==1 and "on" or "off"))
 	end
 end
 
-local function EnableAccessory(enabled,player)
+function EnableAccessory(enabled,player)
 	local char=player.Character
+	if not IsAlive(char) then return end
 	if enabled then
 		NoAccessoryEnabled=true
 		EnableAccessory(false,player)
@@ -4890,74 +4659,100 @@ local function EnableAccessory(enabled,player)
 	end
 end
 
-local function HitBoxExpand(player)
+function HitBoxExpand(player)
 	task.spawn(function()
 		local userId=player.UserId
 		if userId==LocalPlayer.UserId then return end
 		repeat task.wait() until not (HitboxEnabled and IsAlive(player)) or GetCharacter(player.Character)~=nil
 		if not (HitboxEnabled and IsAlive(player)) then return end
-		local char=player.Character
-		local t={}
-		t.Instances={}
-		for i,v in ipairs(char:GetChildren()) do
-			if v:IsA("BasePart") then
-				local instances={}
-				if v.CanCollide==true then instances.CanCollide=instances.CanCollide or v.CanCollide end
-				instances.Transparency=instances.Transparency or v.Transparency
-				instances.Size=instances.Size or v.Size
-				t.Instances[v]=instances
-			end
-		end
-		if t.Connection then Cleanup(t.Connection) t.Connection=nil end
-		t.Connection=player.CharacterAdded:Connect(function()
-			HitBoxExpand(player)
-		end)
-		HitboxCache[userId]=t
-		local data={}
-		local size=Values.HitboxSize
-		if not size or size==1 then
-			data.Size=Vector3.new(2,1,1)
-			data.Transparency=0.2
-		else
-			data.Size=Vector3.new(size,size,size)
-			data.Transparency=0.2
-		end
-		if SuperHitboxEnabled then
-			for i,part in ipairs(char:GetChildren()) do
-				if IsAlive(part) and part:IsA("BasePart") then
-					part.Size=data.Size
-					part.Transparency=data.Transparency
+		local char,size,superHitboxActive,t=player.Character,Values.HitboxSize,SuperHitboxEnabled,HitboxCache[userId] or {}
+		local function UpdateHitboxCollision()
+			local results={}
+			for i,v in ipairs(char:GetChildren()) do
+				if HitboxEnabled and IsAlive(v) and v:IsA("BasePart") then
+					local instances={}
+					if v.CanCollide==true then instances.CanCollide=instances.CanCollide or v.CanCollide end
+					instances.Transparency=instances.Transparency or v.Transparency
+					instances.Size=instances.Size or v.Size
+					results[v]=instances
 				end
 			end
-		else
+			return results
+		end
+		local function UpdateHitbox()
+			warn("Hitbox Updated")
+			local data={}
+			size=Values.HitboxSize
+			if not size or size<=1 then
+				data.Size=Vector3.new(2,1,1)
+				data.Transparency=0.2
+			else
+				data.Size=Vector3.new(size,size,size)
+				data.Transparency=0.2
+			end
+			local hitboxData=HitboxCache[userId] 
+			if char~=player.Character then
+				char=player.Character
+				hitboxData=HitboxCache[userId] 
+				if hitboxData then HitboxCache[userId].Instances=UpdateHitboxCollision() end
+			end
+			if superHitboxActive~=SuperHitboxEnabled then
+				superHitboxActive=SuperHitboxEnabled
+				if not superHitboxActive then
+					hitboxData=HitboxCache[userId] 
+					if hitboxData and hitboxData.Instances then
+						for part,properties in pairs(hitboxData.Instances) do if IsAlive(part) then for property,value in pairs(properties) do part[property]=value end end end
+					end
+					if HitboxCache[userId] then HitboxCache[userId].Instances=UpdateHitboxCollision() end
+				end
+			end
 			local rootPart=GetRootPart(char)
-			if rootPart then
-				rootPart.Size=data.Size
-				rootPart.Transparency=data.Transparency
-				rootPart.CanCollide=false
+			if superHitboxActive then
+				for i,part in ipairs(char:GetChildren()) do
+					if IsAlive(part) and part:IsA("BasePart") then
+						part.Size=data.Size
+						if rootPart then
+							if part~=rootPart then
+								part.Transparency=data.Transparency
+							else
+								part.Transparency=1
+								rootPart.CanCollide=false
+							end
+						else
+							part.Transparency=data.Transparency
+						end
+					end
+				end
+			else
+				if rootPart then
+					rootPart.Size=data.Size
+					rootPart.Transparency=data.Transparency
+					rootPart.CanCollide=false
+				end
 			end
 		end
+		t.Instances=t.Instances or UpdateHitboxCollision()
+		t.Looped=Cleanup(t.Looped)
+		t.Looped=RunService.RenderStepped:Connect(function()
+			if IsAlive(player) and size~=Values.HitboxSize or char~=player.Character or superHitboxActive~=SuperHitboxEnabled then UpdateHitbox() end
+		end)
+		HitboxCache[userId]=t
 	end)
 end
 
-local function RemoveHitbox(userId)
+function RemoveHitbox(userId)
 	local data=HitboxCache[userId]
-	if not data then return end
-	Cleanup(data.Connection) data.Connection=nil
-	if data.Instances then
-		for part,properties in pairs(data.Instances) do
-			if IsAlive(part) then
-				for property,value in pairs(properties) do
-					part[property]=value
-				end
-			end
+	if data then
+		data.Looped=ClearCache({data.Looped})
+		if data.Instances then
+			for part,properties in pairs(data.Instances) do if IsAlive(part) then for property,value in pairs(properties) do part[property]=value end end end
+			data.Instances=nil
 		end
-		data.Instances=nil
+		HitboxCache[userId]=nil
 	end
-	HitboxCache[userId]=nil
 end
 
-local function EnableHitbox(no,s)
+function EnableHitbox(no,s)
 	Values.HitboxSize=Strs.GetNumber(s,Saved.Values.HitboxSize) or Values.HitboxSize
 	if no==1 or no==0 then
 		if no==1 then
@@ -4967,17 +4762,16 @@ local function EnableHitbox(no,s)
 			if not HitboxEnabled then return end HitboxEnabled=false
 			for userId,data in pairs(HitboxCache) do RemoveHitbox(userId) end
 		end
-		local enabled=HitboxEnabled
-		CharacterFrame.HitboxToggle.Turns.BackgroundColor3=TurnColors[enabled]
-		Notify("Hitbox","Hitboxes Expanded"..(enabled and "Expanded" or "Disabled"))
+		CharacterFrame.HitboxToggle.Turns.BackgroundColor3=TurnColors[no==1]
+		Notify("Hitbox","Hitboxes "..(no==1 and "Expanded" or "Disabled"))
 	end
 end
 
-local function EnableAutoJump(enabled)
+function EnableAutoJump(enabled)
 	AutoJumpEnabled=enabled
-	Cleanup(AutoJumpLoopConnection) AutoJumpLoopConnection=nil
+	AutoJumpLooped=Cleanup(AutoJumpLooped)
 	if enabled then
-		AutoJumpLoopConnection=RunService.RenderStepped:Connect(function()
+		AutoJumpLooped=RunService.RenderStepped:Connect(function()
 			if not AutoJumpEnabled then return end
 			local char=LocalPlayer.Character
 			if not IsAlive(char) then return end
@@ -4995,11 +4789,11 @@ local function EnableAutoJump(enabled)
 	Notify("Auto Jump","Auto Jump "..TurnTexts[enabled])
 end
 
-local function EnableDisco(enabled)
+function EnableDisco(enabled)
 	if enabled then
 		if DiscoEnabled then return end DiscoEnabled=true
 		Saved.Lighting.Ambient=Lighting.Ambient
-		Cleanup(DiscoThread) DiscoThread=nil
+		DiscoThread=Cleanup(DiscoThread)
 		DiscoThread=coroutine.create(function()
 			while DiscoEnabled do
 				Lighting.Ambient=Color3.fromRGB(math.random(1,255),math.random(1,255),math.random(1,255))
@@ -5009,15 +4803,14 @@ local function EnableDisco(enabled)
 		coroutine.resume(DiscoThread)
 	else
 		if not DiscoEnabled then return end DiscoEnabled=false
-		Cleanup(DiscoThread) DiscoThread=nil
+		DiscoThread=Cleanup(DiscoThread)
 		Lighting.Ambient=Saved.Lighting.Ambient
 	end
-	enabled=DiscoEnabled
 	LightingFrame.DiscoToggle.Turns.BackgroundColor3=TurnColors[enabled]
 	Notify("Disco","Disco "..TurnTexts[enabled])
 end
 
-local function GiveTeleportTool(enabled,player,s)
+function GiveTeleportTool(enabled,player,s)
 	TeleportToolEnabled=enabled
 	ClearCache(TeleportToolCache) TeleportToolCache={}
 	if enabled then
@@ -5039,7 +4832,7 @@ local function GiveTeleportTool(enabled,player,s)
 	end
 end
 
-local function SetESPToolHightLight(v)
+function SetESPToolHightLight(v)
 	if IsAlive(v) and v.ClassName=="Part" or v.ClassName=="MeshPart" then
 		local a=v:FindFirstChildOfClass("BoxHandleAdornment")
 		if not a then
@@ -5057,32 +4850,31 @@ local function SetESPToolHightLight(v)
 	end
 end
 
-local function GiveESPTool(enabled,player,s)
+function GiveESPTool(enabled,player,s)
 	ESPToolEnabled=enabled
 	ClearCache(ESPToolCache) ESPToolCache={}
 	if enabled then
 		local char=player.Character
-		if IsAlive(char) then
-			local tool=CreateTool("ESP Tool",char)
-			GetHumanoid(char):UnequipTools()
-			table.insert(ESPToolCache,tool)
-			local espToolConnection=tool.Activated:Connect(function()
-				local target=Mouse.Target
-				if not IsAlive(target) then return end
-				local char=target.Parent
-				if IsAlive(char) and char:IsA("Model") and GetRootPart(char)~=nil then
-					if char==LocalPlayer.Character then return end
-					for i,v in ipairs(char:GetChildren()) do SetESPToolHightLight(v) end
-				else
-					SetESPToolHightLight(target)
-				end
-			end)
-			table.insert(ESPToolCache,espToolConnection)
-			local espToolCharAddedConnection=player.CharacterAdded:Connect(function() GiveESPTool(ESPToolEnabled,player,true) end)
-			table.insert(ESPToolCache,espToolCharAddedConnection)
-			if not s then
-				Notify("ESP Tool","Give a ESP Tool")
+		if not IsAlive(char) then return end
+		local tool=CreateTool("ESP Tool",char)
+		GetHumanoid(char):UnequipTools()
+		table.insert(ESPToolCache,tool)
+		local espToolConnection=tool.Activated:Connect(function()
+			local target=Mouse.Target
+			if not IsAlive(target) then return end
+			local char=target.Parent
+			if IsAlive(char) and char:IsA("Model") and GetRootPart(char)~=nil then
+				if char==LocalPlayer.Character then return end
+				for i,v in ipairs(char:GetChildren()) do SetESPToolHightLight(v) end
+			else
+				SetESPToolHightLight(target)
 			end
+		end)
+		table.insert(ESPToolCache,espToolConnection)
+		local espToolCharAddedConnection=player.CharacterAdded:Connect(function() GiveESPTool(ESPToolEnabled,player,true) end)
+		table.insert(ESPToolCache,espToolCharAddedConnection)
+		if not s then
+			Notify("ESP Tool","Give a ESP Tool")
 		end
 	else
 		ClearCache(ESPToolObjectCache) ESPToolObjectCache={}
@@ -5090,74 +4882,73 @@ local function GiveESPTool(enabled,player,s)
 	end
 end
 
-local function GiveFlashlightTool(enabled,player,s)
+function GiveFlashlightTool(enabled,player,s)
 	FlashlightToolEnabled=enabled
 	ClearCache(FlashlightToolCache) FlashlightToolCache={}
 	if enabled then
 		local char=player.Character
-		if IsAlive(char) then
-			local tool=Instance.new("Tool")
-			local handle=Instance.new("Part")
-			local specialMesh=Instance.new("SpecialMesh")
-			local sound1=Instance.new("Sound")
-			local sound2=Instance.new("Sound")
-			local spotLight=Instance.new("SpotLight")
+		if not IsAlive(char) then return end
+		local tool=Instance.new("Tool")
+		local handle=Instance.new("Part")
+		local specialMesh=Instance.new("SpecialMesh")
+		local sound1=Instance.new("Sound")
+		local sound2=Instance.new("Sound")
+		local spotLight=Instance.new("SpotLight")
 
-			tool.Name="Flashlight"
-			tool.CanBeDropped=true
-			tool.RequiresHandle=true
-			tool.Parent=char;
+		tool.Name="Flashlight"
+		tool.CanBeDropped=true
+		tool.RequiresHandle=true
+		tool.Parent=char;
 
-			handle.Name="Handle"
-			handle.Parent=tool
-			handle.Color=Color3.fromRGB(105,64,40);
-			handle.Material=Enum.Material.Wood;
-			handle.Size=Vector3.new(0.400,0.600,2.400);
-			handle.Position=Vector3.new(-32.800,0.295,-4.200);
+		handle.Name="Handle"
+		handle.Parent=tool
+		handle.Color=Color3.fromRGB(105,64,40);
+		handle.Material=Enum.Material.Wood;
+		handle.Size=Vector3.new(0.400,0.600,2.400);
+		handle.Position=Vector3.new(-32.800,0.295,-4.200);
 
-			specialMesh.Parent=handle;
-			specialMesh.MeshId="http://www.roblox.com/asset/?id=115955313"
-			specialMesh.MeshType=Enum.MeshType.FileMesh;
-			specialMesh.TextureId="http://www.roblox.com/asset?id=115984370"
-			specialMesh.Scale=Vector3.new(0.7,0.7,0.7)
+		specialMesh.Parent=handle;
+		specialMesh.MeshId="http://www.roblox.com/asset/?id=115955313"
+		specialMesh.MeshType=Enum.MeshType.FileMesh;
+		specialMesh.TextureId="http://www.roblox.com/asset?id=115984370"
+		specialMesh.Scale=Vector3.new(0.7,0.7,0.7)
 
-			sound1.Name="Activated";
-			sound1.Parent=handle
-			sound1.SoundId="rbxassetid://198914875"
-			sound1.Volume=2;
+		sound1.Name="Activated";
+		sound1.Parent=handle
+		sound1.SoundId="rbxassetid://198914875"
+		sound1.Volume=2;
 
-			sound2.Name="Equip";
-			sound2.Parent=handle;
-			sound2.SoundId="rbxassetid://4458750140";
+		sound2.Name="Equip";
+		sound2.Parent=handle;
+		sound2.SoundId="rbxassetid://4458750140";
 
-			spotLight.Parent=handle
-			spotLight.Angle=120
-			spotLight.Brightness=3
-			spotLight.Color=Color3.fromRGB(255,255,255)
-			spotLight.Face=Enum.NormalId.Front
-			spotLight.Range=60
-			spotLight.Shadows=false
-			GetHumanoid(char):UnequipTools()
-			table.insert(FlashlightToolCache,tool)
-			local flashlightToolConnection=tool.Activated:Connect(function()
-				spotLight.Enabled = not spotLight.Enabled
-				sound1:Play()
-			end)
-			table.insert(FlashlightToolCache,flashlightToolConnection)
-			local flashlightToolEquippedConnection=tool.Equipped:Connect(function()
-				spotLight.Enabled=false
-				sound2:Play()
-			end)
-			table.insert(FlashlightToolCache,flashlightToolEquippedConnection)
-			local flashlightToolUnequippedConnection=tool.Unequipped:Connect(function()
-				sound2:Play()
-			end)
-			table.insert(FlashlightToolCache,flashlightToolUnequippedConnection)
-			local flashlightToolCharAddedConnection=player.CharacterAdded:Connect(function() GiveFlashlightTool(FlashlightToolEnabled,player,true) end)
-			table.insert(FlashlightToolCache,flashlightToolCharAddedConnection)
-			if not s then
-				Notify("Flashlight Tool","Give a Flashlight Tool")
-			end
+		spotLight.Parent=handle
+		spotLight.Angle=120
+		spotLight.Brightness=3
+		spotLight.Color=Color3.fromRGB(255,255,255)
+		spotLight.Face=Enum.NormalId.Front
+		spotLight.Range=60
+		spotLight.Shadows=false
+		GetHumanoid(char):UnequipTools()
+		table.insert(FlashlightToolCache,tool)
+		local flashlightToolConnection=tool.Activated:Connect(function()
+			spotLight.Enabled = not spotLight.Enabled
+			sound1:Play()
+		end)
+		table.insert(FlashlightToolCache,flashlightToolConnection)
+		local flashlightToolEquippedConnection=tool.Equipped:Connect(function()
+			spotLight.Enabled=false
+			sound2:Play()
+		end)
+		table.insert(FlashlightToolCache,flashlightToolEquippedConnection)
+		local flashlightToolUnequippedConnection=tool.Unequipped:Connect(function()
+			sound2:Play()
+		end)
+		table.insert(FlashlightToolCache,flashlightToolUnequippedConnection)
+		local flashlightToolCharAddedConnection=player.CharacterAdded:Connect(function() GiveFlashlightTool(FlashlightToolEnabled,player,true) end)
+		table.insert(FlashlightToolCache,flashlightToolCharAddedConnection)
+		if not s then
+			Notify("Flashlight Tool","Give a Flashlight Tool")
 		end
 	else
 		Notify("Flashlight Tool","Remove Flashlight Tool")
@@ -5172,9 +4963,7 @@ SafeNPC(function(npc)
 end,function(npc)
 	local npcIndex=table.find(NPCList,npc) 
 	if npcIndex then table.remove(NPCList,npcIndex) end
-	
 	RemoveESPNPC(npc)
-	warn("NPC removed")
 end)
 
 BarList={}
@@ -5207,7 +4996,7 @@ for k,t in ipairs({{"Player","maxzoom",10,PlayerFrame.MaxZooms},{"Player","minzo
 				["EndValue"]=9999
 			},
 			["minzoom"]={
-				["Value"]=Saved.Player.CameraMaxZoomDistance,
+				["Value"]=Saved.Player.CameraMinZoomDistance,
 				["Percent"]=20
 			},
 			["walkspeed"]={
@@ -5250,7 +5039,7 @@ for k,t in ipairs({{"Player","maxzoom",10,PlayerFrame.MaxZooms},{"Player","minzo
 						end
 					end
 				elseif l.Name=="minzoom" then
-					if v1<=0 then v1=5 end
+					if v1<=0 or v1%1~=0 then v1=5 end
 				end
 				for i=2,length do
 					multi=multi+((percent*i)/100)
@@ -5260,9 +5049,7 @@ for k,t in ipairs({{"Player","maxzoom",10,PlayerFrame.MaxZooms},{"Player","minzo
 					results[#results+1]=d.EndValue
 				end
 			end
-			if IsAlive(l.TextBox) then
-				l.TextBox.Text=results[1]
-			end
+			if IsAlive(l.TextBox) then l.TextBox.Text=Strs.ToFloatString(results[1]) end
 		else
 			v1,v2=Saved.Humanoid.JumpHeight,Saved.Humanoid.JumpPower
 			length=10
@@ -5283,10 +5070,7 @@ for k,t in ipairs({{"Player","maxzoom",10,PlayerFrame.MaxZooms},{"Player","minzo
 			end
 			results[true]=t2
 			GetHumanoid(LocalPlayer.Character,function(humanoid)
-				local useJumpPower=humanoid.UseJumpPower
-				if IsAlive(l.TextBox) then
-					l.TextBox.Text=tostring(l.List[useJumpPower][l.Index]).." [".."Jump"..(useJumpPower and "Power" or "Height").."]"
-				end
+				if IsAlive(l.TextBox) then l.TextBox.Text=`{Strs.ToFloatString(results[humanoid.UseJumpPower][l.Index])} [{humanoid.UseJumpPower and "JumpPower" or "JumpHeight"}]` end
 			end)
 		end
 		l.List=results
@@ -5297,53 +5081,53 @@ for k,t in ipairs({{"Player","maxzoom",10,PlayerFrame.MaxZooms},{"Player","minzo
 	BarList[index]=data
 end
 
-AddCommand({"serverinfo","info"},nil,function()
-	OpenServerInfo(true)
+AddCommand({"info"},function()
+	OpenInfo(true)
 end)
 
-AddCommand({"unserverinfo","uninfo"},nil,function()
-	OpenServerInfo(false)
+AddCommand({"uninfo"},function()
+	OpenInfo(false)
 end)
 
-AddCommand({"fixother"},nil,function()
+AddCommand({"fixother"},function()
 	SetSaved("Other") UpdateSaved("Other")
 	Notify("Restore Other","Restores a other")
 end)
 
-AddCommand({"fixall"},nil,function()
+AddCommand({"fixall"},function()
 	SetSaved("All") UpdateSaved("All")
 	FixCamera()
-	--for i,v in ipairs(Indicators) do if v.Type and v.Type=="Player" then  Indicators[i]=v.Func(v) end end
+	for i,v in ipairs(BarList) do local success,result=pcall(function() return v.Func(v) end) if success then BarList[i]=result end end
 	Notify("Restore All","Restores all")
 end)
 
-AddCommand({"console"},nil,function()
+AddCommand({"console"},function()
 	StarterGui:SetCore("DevConsoleVisible",true)
 end)
 
-AddCommand({"unconsole"},nil,function()
+AddCommand({"unconsole"},function()
 	StarterGui:SetCore("DevConsoleVisible",false)
 end)
 
-AddCommand({"wallhop"},nil,function()
+AddCommand({"wallhop"},function()
 	if IsStudio then return end
 	Notify("Wall Hop","Hold on a sec")
 	loadstring(game:HttpGet("https://pastebin.com/raw/MdLNZ1rg"))()
 end)
 
-AddCommand({"dex","explorer"},nil,function()
+AddCommand({"dex","explorer"},function()
 	if IsStudio then return end
 	Notify("Explorer","Hold on a sec")
 	loadstring(game:HttpGet("https://raw.githubusercontent.com/infyiff/backup/main/dex.lua"))()
 end)
 
-AddCommand({"spy"},nil,function()
+AddCommand({"spy"},function()
 	if IsStudio then return end
 	Notify("Spy",'Hold on a sec')
 	loadstring(game:HttpGet("https://raw.githubusercontent.com/infyiff/backup/main/SimpleSpyV3/main.lua"))()
 end)
 
-AddCommand({"f3x","btool"},nil,function()
+AddCommand({"f3x","btool"},function()
 	if IsStudio then return end 
 	Notify("F3X","Hold on a sec")
 	loadstring(game:HttpGet("https://raw.githubusercontent.com/infyiff/backup/refs/heads/main/f3x.lua"))()
@@ -5355,12 +5139,12 @@ AddCommand({"grabobject","instalobject"},"Give you grab object panel",function()
 	loadstring(game:HttpGet("https://pastebin.com/raw/KXmWn38Q"))()
 end)
 
-AddCommand({"gameteleport","gametp"},nil,function(gameId)
+AddCommand({"gameteleport","gametp"},function(gameId)
 	if IsStudio then return end
 	TeleportService:Teleport(gameId)
 end)
 
-AddCommand({"antilag","boostfps","lowgraphics","potato"},nil,function()
+AddCommand({"antilag","boostfps","lowgraphics","potato"},function()
 	local terrain=workspace:FindFirstChildOfClass("Terrain")
 	if terrain then
 		terrain.WaterWaveSize=0
@@ -5376,11 +5160,6 @@ AddCommand({"antilag","boostfps","lowgraphics","potato"},nil,function()
 		for i,v in ipairs(game:GetDescendants()) do
 			if IsAlive(v)  then
 				if v:IsA("BasePart") then
-					if v.ClassName=="Part" or v.ClassName=="MeshPart" and not v:FindFirstChildOfClass("TouchTransmitter") then
-						for j,k in ipairs({"CanTouch","CanQuery"}) do
-							pcall(function() v[k]=false end)
-						end
-					end
 					v.Material="Plastic"
 					v.Reflectance=0
 					v.BackSurface="SmoothNoOutlines"
@@ -5398,25 +5177,23 @@ AddCommand({"antilag","boostfps","lowgraphics","potato"},nil,function()
 		end
 	end)
 	for i,v in ipairs(Lighting:GetDescendants()) do if IsAlive(v) and v:IsA("PostEffect") then v.Enabled=false end end
-	Cleanup(AntiLagObjectAddedConnection) AntiLagObjectAddedConnection=nil
-	AntiLagObjectAddedConnection=workspace.DescendantAdded:Connect(function(child)
-		if child:IsA("BasePart") and not child:FindFirstChildOfClass("TouchTransmitter") then
-			RunService.Heartbeat:Wait()
-			for j,k in ipairs({"CanTouch","CanQuery"}) do pcall(function() child[k]=false end) end
-		end
+	AntiLagObjectAdded=Cleanup(AntiLagObjectAdded)
+	AntiLagObjectAdded=workspace.DescendantAdded:Connect(function(child)
 		if child:IsA("ParticleEmitter") or child:IsA("Trail") then
 			RunService.Heartbeat:Wait()
 			child.Lifetime=NumberRange.new(0)
-		end
-		if child:IsA("ForceField") or child:IsA("Sparkles") or child:IsA("Smoke") or child:IsA("Fire") or child:IsA("Beam") then
+		elseif child:IsA("ForceField")  then
 			RunService.Heartbeat:Wait()
-			child:Destroy()
+			child.Visible=false
+		elseif child:IsA("Sparkles") or child:IsA("Smoke") or child:IsA("Fire") or child:IsA("Beam") then
+			RunService.Heartbeat:Wait()
+			child.Enabled=false
 		end
 	end)
 	Notify("Anti Lag","Anti Lag turning on")
 end)
 
-AddCommand({"screenshot","scrnshot"},nil,function(args, speaker)
+AddCommand({"screenshot","scrnshot"},function(args, speaker)
 	return CoreGui:TakeScreenshot()
 end)
 
@@ -5454,18 +5231,11 @@ AddCommand({"serverhop","shop"},"Teleports you to a different server",function()
 	end
 end)
 
-AddCommand({"antikick"},nil,function()
-	if IsStudio then return end
-	if not hookmetamethod then 
-		Notify("Anti Kick","Your exploit does not support this command (missing hookmetamethod)")
-		return
-	end
-	local player=LocalPlayer
-	local oldhmmi
-	local oldhmmnc
-	local oldKickFunction
+AddCommand({"antikick"},function()
+	if type(hookmetamethod)~="function" then  NotifyWarn("Anti Kick","Your exploit does not support this command (missing hookmetamethod)") return end
+	local oldhmmi,oldhmmnc,oldKickFunction;
 	if hookfunction then
-		oldKickFunction=hookfunction(player.Kick,function() end)
+		oldKickFunction=hookfunction(LocalPlayer.Kick,function() end)
 	end
 	oldhmmi=hookmetamethod(game,"__index",function(self,method)
 		if self==LocalPlayer and method:lower()=="kick" then
@@ -5473,16 +5243,13 @@ AddCommand({"antikick"},nil,function()
 		end
 		return oldhmmi(self,method)
 	end)
-	oldhmmnc=hookmetamethod(game,"__Namecall",function(self,...)
-		if self==LocalPlayer and getNamecallmethod():lower()=="kick" then
-			return
-		end
-		return oldhmmnc(self,...)
+	oldhmmnc=hookmetamethod(game,"__namecall",function(self,...)
+		if self==LocalPlayer and getNamecallmethod():lower()=="kick" then return end return oldhmmnc(self,...)
 	end)
 	Notify("Anti Kick","Client anti kick is now active (only effective on localscript kick)")
 end)
 
-AddCommand({"antiidle","afk","antiafk","afkmode"},nil,function()
+AddCommand({"antiidle","afk","antiafk","afkmode"},function()
 	local GC=getconnections or get_signal_cons
 	if GC then
 		for i,v in pairs(GC(LocalPlayer.Idled)) do
@@ -5492,181 +5259,180 @@ AddCommand({"antiidle","afk","antiafk","afkmode"},nil,function()
 				v["Disconnect"](v)
 			end
 		end
-		Notify("Anti Idle","Anti Idle Enabled with function")
+		Notify("Anti Idle","Anti Idle Function Enabled")
 	else
-		Cleanup(AFKIdleConnection) AFKIdleConnection=nil
-		AFKIdleConnection=LocalPlayer.Idled:Connect(function()
+		AFKIdled=Cleanup(AFKIdled)
+		AFKIdled=LocalPlayer.Idled:Connect(function()
 			VirtualUser:CaptureController()
 			VirtualUser:ClickButton2(Vector2.new())
 		end)
-
-		Notify("Anti Idle","Anti Idle Enabled with player")
+		Notify("Anti Idle","Anti Idle Player Enabled")
 	end
 end)
 
-AddCommand({"maxzoom"},nil,function(s)
+AddCommand({"maxzoom"},function(s)
 	EnableMaxZoom(2,LocalPlayer,s)
 end)
 
-AddCommand({"loopmaxzoom"},nil,function(s)
+AddCommand({"loopmaxzoom"},function(s)
 	EnableMaxZoom(1,LocalPlayer,s)
 end)
 
-AddCommand({"unloopmaxzoom"},nil,function(s)
+AddCommand({"unloopmaxzoom"},function(s)
 	EnableMaxZoom(0,LocalPlayer,s)
 end)
 
-AddCommand({"minzoom"},nil,function(s)
+AddCommand({"minzoom"},function(s)
 	EnableMinZoom(2,LocalPlayer,s)
 end)
 
-AddCommand({"loopminzoom"},nil,function(s)
+AddCommand({"loopminzoom"},function(s)
 	EnableMinZoom(1,LocalPlayer,s)
 end)
 
-AddCommand({"unloopminzoom"},nil,function(s)
+AddCommand({"unloopminzoom"},function(s)
 	EnableMinZoom(0,LocalPlayer,s)
 end)
 
-AddCommand({"fixplayer","fixplr","restoreplayer","restoreplr"},nil,function()
+AddCommand({"fixplayer","fixplr","restoreplayer","restoreplr"},function()
 	SetSaved("Player") UpdateSaved("Player") 
 	for i,v in ipairs(BarList) do if v.Type=="Player" then local success,result=pcall(function() return v.Func(v) end) if success then BarList[i]=result end end end
 	Notify("Restore Player","Restores a player")
 end)
 
-AddCommand({"fixhumanoid","fixboost","restorehumanoid","restoreboost"},nil,function()
+AddCommand({"fixhumanoid","fixboost","restorehumanoid","restoreboost"},function()
 	SetSaved("Humanoid") UpdateSaved("Humanoid") 
 	for i,v in ipairs(BarList) do if v.Type=="Humanoid" then local success,result=pcall(function() return v.Func(v) end) if success then BarList[i]=result end end end
 	Notify("Restore Boost","Restores a boost")
 end)
 
-AddCommand({"updateall"},nil,function()
+AddCommand({"updateall"},function()
 	UpdateSaved("Humanoid") UpdateSaved("Player")
 	for i,v in ipairs(BarList) do if v.Type=="Player" or v.Type=="Humanoid" then local success,result=pcall(function() return v.Func(v) end) if success then BarList[i]=result end end end
 	Notify("Update All","All has been successfully updated")
 end)
 
-AddCommand({"updatehumanoid","updateboost"},nil,function()
+AddCommand({"updatehumanoid","updateboost"},function()
 	UpdateSaved("Humanoid") 
 	for i,v in ipairs(BarList) do if v.Type=="Humanoid" then local success,result=pcall(function() return v.Func(v) end) if success then BarList[i]=result end end end
 	Notify("Update Boost","Boost has been successfully updated")
 end)
 
-AddCommand({"updateplayer"},nil,function()
+AddCommand({"updateplayer"},function()
 	UpdateSaved("Player") 
 	for i,v in ipairs(BarList) do if v.Type=="Player" then local success,result=pcall(function() return v.Func(v) end) if success then BarList[i]=result end end end
 	Notify("Update Player","Player has been successfully updated")
 end)
 
-AddCommand({"fixcamera","fixcam",'restorecamera',"restorecam"},nil,function()
+AddCommand({"fixcamera","fixcam",'restorecamera',"restorecam"},function()
 	FixCamera("Restores a camera")
 end)
 
-AddCommand({"antifling"},nil,function()
+AddCommand({"antifling"},function()
 	EnableAntiFling(true)
 end)
 
-AddCommand({"unantifling"},nil,function()
+AddCommand({"unantifling"},function()
 	EnableAntiFling(false)
 end)
 
-AddCommand({"invisible"},nil,function()
+AddCommand({"invisible"},function()
 	EnableInvisible(true,LocalPlayer)
 end)
 
-AddCommand({"visible","uninvisible"},nil,function()
+AddCommand({"visible","uninvisible"},function()
 	EnableInvisible(false,LocalPlayer)
 end)
 
-AddCommand({"fixcamera","fixcam",'restorecamera',"restorecam"},nil,function()
+AddCommand({"fixcamera","fixcam",'restorecamera',"restorecam"},function()
 	FixCamera("Restores a camera")
 end)
 
-AddCommand({"aimtype"},nil,function(s)
+AddCommand({"aimtype"},function(s)
 	EnableAim(2,LocalPlayer,s,Values.AimTargetType,tostring(Values.AimRange))
 end)
 
-AddCommand({"aimtarget"},nil,function(s)
+AddCommand({"aimtarget"},function(s)
 	EnableAim(2,LocalPlayer,Values.AimType,s,tostring(Values.AimRange))
 end)
 
-AddCommand({"aimrange"},nil,function(s)
+AddCommand({"aimrange"},function(s)
 	EnableAim(2,LocalPlayer,Values.AimType,Values.AimTargetType,s)
 end)
 
-AddCommand({"aim"},nil,function(s1,s2,s3)
+AddCommand({"aim"},function(s1,s2,s3)
 	EnableAim(1,LocalPlayer,s1,s2,s3)
 end)
 
-AddCommand({"unaim"},nil,function(s1,s2,s3)
+AddCommand({"unaim"},function(s1,s2,s3)
 	EnableAim(0,LocalPlayer,s1,s2,s3)
 end)
 
-AddCommand({"autojump"},nil,function()
+AddCommand({"autojump"},function()
 	EnableAutoJump(true)
 end)
 
-AddCommand({"unautojump"},nil,function()
+AddCommand({"unautojump"},function()
 	EnableAutoJump(false)
 end)
 
-AddCommand({"walkspeed","ws","speed"},nil,function(s)
+AddCommand({"walkspeed","ws","speed"},function(s)
 	EnableWalkSpeed(2,LocalPlayer,s)
 end)
 
-AddCommand({"loopwalkspeed"},nil,function(s)
+AddCommand({"loopwalkspeed"},function(s)
 	EnableWalkSpeed(1,LocalPlayer,s)
 end)
 
-AddCommand({"unloopwalkspeed"},nil,function(s)
+AddCommand({"unloopwalkspeed"},function(s)
 	EnableWalkSpeed(0,LocalPlayer,s)
 end)
 
-AddCommand({"health","hp"},nil,function(s)
+AddCommand({"health","hp"},function(s)
 	EnableHealth(2,LocalPlayer,s)
 end)
 
-AddCommand({"loophealth"},nil,function(s)
+AddCommand({"loophealth"},function(s)
 	EnableHealth(1,LocalPlayer,s)
 end)
 
-AddCommand({"unloophealth","unloophp","unlh"},nil,function(s)
+AddCommand({"unloophealth","unloophp","unlh"},function(s)
 	EnableHealth(0,LocalPlayer,s)
 end)
 
-AddCommand({"jumppower","jpower","jp"},nil,function(s)
+AddCommand({"jumppower","jpower","jp"},function(s)
 	EnableJump(2,LocalPlayer,s)
 end)
 
-AddCommand({"loopjumppower","ljpower","ljp"},nil,function(s)
+AddCommand({"loopjumppower","ljpower","ljp"},function(s)
 	EnableJump(1,LocalPlayer,s)
 end)
 
-AddCommand({"unloopjumppower","unljpower","unljp"},nil,function(s)
+AddCommand({"unloopjumppower","unljpower","unljp"},function(s)
 	EnableJump(0,LocalPlayer,s)
 end)
 
-AddCommand({"goto","to","tpto"},nil,function(s)
+AddCommand({"goto","to","tpto"},function(s)
 	Goto(s)
 end)
 
-AddCommand({"follow"},nil,function(s)
+AddCommand({"follow"},function(s)
 	EnableFollow(true,s)
 end)
 
-AddCommand({"unfollow"},nil,function(s)
+AddCommand({"unfollow"},function(s)
 	EnableFollow(false,s)
 end)
 
-AddCommand({"noclip","wallhack"},nil,function()
+AddCommand({"noclip","wallhack"},function()
 	EnableNoclip(true,LocalPlayer)
 end)
 
-AddCommand({"clip","unnoclip","unwallhack","reclip"},nil,function()
+AddCommand({"clip","unnoclip","unwallhack","reclip"},function()
 	EnableNoclip(false,LocalPlayer)
 end)
 
-AddCommand({"reset","r"},nil,function()
+AddCommand({"reset","r"},function()
 	local char=LocalPlayer.Character
 	local humanoid=char:FindFirstChildWhichIsA("Humanoid")
 	if humanoid then
@@ -5676,7 +5442,7 @@ AddCommand({"reset","r"},nil,function()
 	end
 end)
 
-AddCommand({"respawn","rspwn"},nil,function()
+AddCommand({"respawn","rspwn"},function()
 	local player=LocalPlayer
 	if not IsAlive(player) then return end
 	local char=GetCharacter(player.Character)
@@ -5701,19 +5467,19 @@ AddCommand({"respawn","rspwn"},nil,function()
 	newChar:PivotTo(cf)
 end)
 
-AddCommand({"flyspeed","flightspeed"},nil,function(s)
+AddCommand({"flyspeed","flightspeed"},function(s)
 	EnableFly(2,LocalPlayer,s)
 end)
 
-AddCommand({"fly","flight"},nil,function(s)
+AddCommand({"fly","flight"},function(s)
 	EnableFly(1,LocalPlayer,s)
 end)
 
-AddCommand({"unfly","noflight","unflight"},nil,function(s)
+AddCommand({"unfly","noflight","unflight"},function(s)
 	EnableFly(0,LocalPlayer,s)
 end)
 
-AddCommand({"flingspeed","spinspeed"},nil,function(s)
+AddCommand({"flingspeed","spinspeed"},function(s)
 	EnableSpin(2,LocalPlayer,s)
 end)
 
@@ -5725,126 +5491,126 @@ AddCommand({"unfling","unspin"},"Disables the spin command",function(s)
 	EnableSpin(0,LocalPlayer,s)
 end)
 
-AddCommand({"animationspeed","animspeed"},nil,function(s)
+AddCommand({"animationspeed","animspeed"},function(s)
 	EnableBoostAnim(2,LocalPlayer,s)
 end)
 
-AddCommand({"boostanimation","boostanim"},nil,function(s)
+AddCommand({"boostanimation","boostanim"},function(s)
 	EnableBoostAnim(1,LocalPlayer,s)
 end)
 
-AddCommand({"unboostanimation","unboostanim"},nil,function(s)
+AddCommand({"unboostanimation","unboostanim"},function(s)
 	EnableBoostAnim(0,LocalPlayer,s)
 end)
 
-AddCommand({"idleanimation","idleanim"},nil,function()
+AddCommand({"idleanimation","idleanim"},function()
 	IdleAnimEnabled=true CharacterFrame.IdleAnimToggle.Turns.BackgroundColor3=TurnColors[true]
 end)
 
-AddCommand({"unidleanimation","unidleanim"},nil,function()
+AddCommand({"unidleanimation","unidleanim"},function()
 	IdleAnimEnabled=false CharacterFrame.IdleAnimToggle.Turns.BackgroundColor3=TurnColors[false]
 end)
 
-AddCommand({"dance"},nil,function()
+AddCommand({"dance"},function()
 	EnableDance(true,LocalPlayer)
 end)
 
-AddCommand({"undance","nodance"},nil,function()
+AddCommand({"undance","nodance"},function()
 	EnableDance(false,LocalPlayer)
 end)
 
-AddCommand({"noaccessory"},nil,function()
+AddCommand({"noaccessory"},function()
 	EnableAccessory(true,LocalPlayer)
 end)
 
-AddCommand({"fixaccessory","restoreaccessory","fixhat","restorehat","reaccessory"},nil,function()
+AddCommand({"fixaccessory","restoreaccessory","fixhat","restorehat","reaccessory"},function()
 	EnableAccessory(false,LocalPlayer)
 end)
 
-AddCommand({"day"},nil,function()
+AddCommand({"day"},function()
 	Lighting.ClockTime=14
 end)
 
-AddCommand({"night"},nil,function()
+AddCommand({"night"},function()
 	Lighting.ClockTime=0
 end)
 
-AddCommand({"disco"},nil,function()
+AddCommand({"disco"},function()
 	EnableDisco(true)
 end)
 
-AddCommand({"undisco"},nil,function()
+AddCommand({"undisco"},function()
 	EnableDisco(false)
 end)
 
-AddCommand({"fixlighting","restorelighting"},nil,function()
+AddCommand({"fixlighting","restorelighting"},function()
 	SetSaved("Lighting") UpdateSaved("Lighting")
 	--for k,v in pairs(SaveLighting) do pcall(function() Lighting[k]=v or Lighting[k] end) end
 	Notify("Restore Lighting","Restores a lighting")
 end)
 
-AddCommand({"teleporttool","tptool"},nil,function()
+AddCommand({"teleporttool","tptool"},function()
 	GiveTeleportTool(true,LocalPlayer)
 end)
 
-AddCommand({"unteleporttool","untptool"},nil,function()
+AddCommand({"unteleporttool","untptool"},function()
 	GiveTeleportTool(false,LocalPlayer)
 end)
 
-AddCommand({"flashlighttool","lighttool"},nil,function()
+AddCommand({"flashlighttool","lighttool"},function()
 	GiveFlashlightTool(true,LocalPlayer)
 end)
 
-AddCommand({"unflashlighttool","unlighttool"},nil,function()
+AddCommand({"unflashlighttool","unlighttool"},function()
 	GiveFlashlightTool(false,LocalPlayer)
 end)
 
-AddCommand({"esptool"},nil,function()
+AddCommand({"esptool"},function()
 	GiveESPTool(true,LocalPlayer)
 end)
 
-AddCommand({"unesptool"},nil,function()
+AddCommand({"unesptool"},function()
 	GiveESPTool(false,LocalPlayer)
 end)
 
-AddCommand({"esp"},nil,function()
+AddCommand({"esp"},function()
 	EnableESP(true)
 end)
 
-AddCommand({"unesp"},nil,function()
+AddCommand({"unesp"},function()
 	EnableESP(false)
 end)
 
-AddCommand({"espnpc"},nil,function()
+AddCommand({"espnpc"},function()
 	EnableESPNPC(true)
 end)
 
-AddCommand({"unespnpc"},nil,function()
+AddCommand({"unespnpc"},function()
 	EnableESPNPC(false)
 end)
 
-AddCommand({"hitboxsize"},nil,function(s)
+AddCommand({"hitboxsize"},function(s)
 	EnableHitbox(2,s)
 end)
 
-AddCommand({"hitbox"},nil,function(s)
+AddCommand({"hitbox"},function(s)
 	EnableHitbox(1,s)
 end)
 
-AddCommand({"unhitbox","unaggressivehitbox","nohitbox","noaggressivehitbox"},nil,function(s)
+AddCommand({"unhitbox","unaggressivehitbox","nohitbox","noaggressivehitbox"},function(s)
 	EnableHitbox(0,s)
 end)
 
-AddCommand({"togglesuperhitbox"},nil,function()
+AddCommand({"togglesuperhitbox"},function()
 	local enabled=not SuperHitboxEnabled SuperHitboxEnabled=enabled CharacterFrame.SuperHitboxToggle.Turns.BackgroundColor3=TurnColors[enabled] Notify("Super Hitbox","Super Hitbox "..TurnTexts[enabled])
 end)
 
-AddCommand({"nofog"},nil,function(s)
+AddCommand({"nofog"},function(s)
 	Lighting.FogEnd=100000
 	for i,v in pairs(Lighting:GetDescendants()) do if v:IsA("Atmosphere") then v:Destroy() end end
 end)
 
-AddCommand({"cameramode"},nil,function(s)
+AddCommand({"cameramode"},function(s)
 	if s then 
 		local ls=string.lower(s)
 		if ls=="classic" or ls=="rpg" or ls=="thirdperson" or Strs.IsOriginal(ls) then
@@ -5852,35 +5618,44 @@ AddCommand({"cameramode"},nil,function(s)
 		else
 			LocalPlayer.CameraMode=Enum.CameraMode.LockFirstPerson
 		end
+	end
+end)
+
+AddCommand({"togglethirdperson"},function(s)
+	local cameraMode=LocalPlayer.CameraMode
+	if cameraMode==Enum.CameraMode.Classic or cameraMode==Enum.CameraMode.LockFirstPerson then
+		local enabled=LocalPlayer.CameraMode==Enum.CameraMode.Classic
+		PlayerFrame.ThirdPersonToggle.Turns.BackgroundColor3=TurnColors[enabled]
+		ExecuteCommand(`cameramode {enabled and "lockfirstperson" or "classic"}` )
+		ThirdPersonEnabled=enabled
 		if LocalPlayer.CameraMode==Enum.CameraMode.LockFirstPerson then
 			MenuFrame.Visible=false
 			OpenButton.Visible=true
-			
 			local titleStr=""
 			if UserInputService.KeyboardEnabled then
 				titleStr="Press / and "
 			end
-			Notify("Info",titleStr.."Type in chat ';cameramode thirdperson' to back third person",15)
+			Notify("Info",titleStr..`Type in chat "{Prefix}togglethirdperson" to back third person`,15)
 		end
 	end
 end)
 
-AddCommand({"spectate","view"},nil,function(s)
+AddCommand({"spectate","view"},function(s)
 	local player=GetPlayer(s) 
 	if not IsAlive(player) then NotifyWarn("View","Player not found") return end
 	ViewEnabled=true
-	Cleanup(ViewCharAddedConnection) ViewCharAddedConnection=nil
+	ViewCharAdded=Cleanup(ViewCharAdded)
 	StopFreeCamera()
 	View(player)
 	SelectPlayerFrame.Views.Button.Text="Unview"
 	Notify("Spectate","Viewing "..player.Name)
 end)
 
-AddCommand({"unspectate","unview"},nil,function()
+AddCommand({"unspectate","unview"},function()
 	Unview("View turned off")
 end)
 
-AddCommand({"enable"},nil,function(s)
+AddCommand({"enable"},function(s)
 	if s then
 		s=string.lower(s)
 		if s=="console" then
@@ -5898,7 +5673,7 @@ AddCommand({"enable"},nil,function(s)
 	end
 end)
 
-AddCommand({"disable"},nil,function(s)
+AddCommand({"disable"},function(s)
 	if s then
 		s=string.lower(s)
 		if s=="console" then
@@ -5916,7 +5691,7 @@ AddCommand({"disable"},nil,function(s)
 	end
 end)
 
-local function SetPlayerFrame(userIdOrName)
+function SetPlayerFrame(userIdOrName)
 	local userIdOrNameType=type(userIdOrName)
 	if not (userIdOrNameType=="number" or userIdOrNameType=="string") then return end
 	local success,userId=false,1
@@ -5954,7 +5729,7 @@ end
 
 local CurrentPlayerTemplate=nil
 
-local function SetPlayerFrameColor(template)
+function SetPlayerFrameColor(template)
 	if IsAlive(CurrentPlayerTemplate) then
 		CurrentPlayerTemplate.BackgroundColor3=Color3.fromRGB(163,162,165)
 		CurrentPlayerTemplate.BackgroundTransparency=1
@@ -5970,7 +5745,7 @@ end
 SelectPlayerFrame.PlayersScroller.PlayerTemplate.Visible=false
 SetPlayerFrame(LocalPlayer.UserId)
 
-local function ApplyPlayerFrame()
+function ApplyPlayerFrame()
 	if not next(SelectInfo) then return end
 	local player,userId,template=SelectInfo.Value,SelectInfo.UserId,SelectInfo.Template
 	PlayerInstance=player
@@ -6002,17 +5777,17 @@ function AddPlayerFrame(player,index)
 	end
 end
 
-local function NextSelectPlayer()
+function NextSelectPlayer()
 	SelectIndex,SelectInfo=NextValue(PlayerList,SelectIndex)
 	ApplyPlayerFrame()
 end
 
-local function PreviousSelectPlayer()
+function PreviousSelectPlayer()
 	SelectIndex,SelectInfo=PreviousValue(PlayerList,SelectIndex)
 	ApplyPlayerFrame()
 end
 
-local function RemovePlayer(userId)
+function RemovePlayer(userId)
 	local index=nil
 	for i=1,#PlayerList do
 		local playerData=PlayerList[i]
@@ -6037,15 +5812,14 @@ end,function(player)
 	local viewUserId=IsAlive(ViewInstance) and ViewInstance.UserId or nil
 	local playerUserId=IsAlive(PlayerInstance) and PlayerInstance.UserId or nil
 	if playerUserId and playerUserId==userId then PlayerInstance=nil end
-	if viewUserId and viewUserId==userId then ViewInstance=nil end
 	RemovePlayer(userId)
 	RemoveESP(userId)
 	RemoveHitbox(userId)
-	if ViewEnabled and viewUserId and viewUserId==userId then
+	if viewUserId and viewUserId==userId then
 		if #PlayerList<=2 then
 			Unview("View turned off (player left)")
 		else
-			--NextSelectPlayer()
+			NextSelectPlayer()
 		end
 	end
 end)
@@ -6094,18 +5868,6 @@ end)
 
 function UpdateMinusOrPlusUI(v)
 	local index,length=v.Index,v.Length
-	if v.Value then
-		v.TextBox.Text=tostring(v.Value)
-	else
-		if v.Name=="jumppower" then
-			GetHumanoid(LocalPlayer.Character,function(humanoid)
-				local useJumpPower=humanoid.UseJumpPower
-				v.TextBox.Text=tostring(v.List[useJumpPower][index]).." [".."Jump"..(useJumpPower and "Power" or "Height").."]"
-			end)
-		else
-			v.TextBox.Text=tostring(v.List[index] or nil)
-		end
-	end
 	v.RB.Visible=index<length and true or false
 	v.LB.Visible=index>1
 	for j,k in ipairs(v.Frames) do
@@ -6119,17 +5881,13 @@ for k,v in ipairs(BarList) do
 		local o=v.Frames[j]
 		if IsAlive(o) and o:IsA("ImageButton") then
 			o.MouseButton1Click:Connect(function()
-				UpdateMinusOrPlusUI({["CommandName"]=v.Name,["Index"]=j,["Length"]=v.Length,["List"]=v.List,["Frames"]=v.Frames,["TextBox"]=v.TextBox,["RB"]=v.RB,["LB"]=v.LB})
+				UpdateMinusOrPlusUI({["Name"]=v.Name,["Index"]=j,["Length"]=v.Length,["List"]=v.List,["Frames"]=v.Frames,["TextBox"]=v.TextBox,["RB"]=v.RB,["LB"]=v.LB})
+				local propertyName=""
 				if v.Name=="jumppower" then
-					local result=nil
-					pcall(function()
-						GetHumanoid(LocalPlayer.Character,function(humanoid)
-							pcall(function()
-								result=v.List[humanoid.UseJumpPower][j]
-							end)
-						end)
+					GetHumanoid(LocalPlayer.Character,function(humanoid)
+						propertyName=`Jump{humanoid.UseJumpPower and "Power" or "Height"}`
+						v.Value=v.List[humanoid.UseJumpPower][j]
 					end)
-					v.Value=result
 				else
 					v.Value=v.List[j]
 				end
@@ -6137,6 +5895,7 @@ for k,v in ipairs(BarList) do
 					ExecuteCommand(`unloop{v.Name}`)
 				end
 				if v.Value then
+					if IsAlive(v.TextBox) then v.TextBox.Text=v.Name=="jumppower" and `{Strs.ToFloatString(v.Value)} [{propertyName}]` or `{Strs.ToFloatString(v.Value)}` end
 					if j==2 then
 						ExecuteCommand(`loop{v.Name} {v.Value}`)
 					end
@@ -6147,20 +5906,15 @@ for k,v in ipairs(BarList) do
 		end
 	end
 	v.RB.MouseButton1Click:Connect(function()
-		local index,length=v.Index,v.Length
+		local index,length,propertyName=v.Index,v.Length,""
 		if index<length then
 			index=index+1
-			UpdateMinusOrPlusUI({["CommandName"]=v.Name,["Index"]=index,["Length"]=length,["List"]=v.List,["Frames"]=v.Frames,["TextBox"]=v.TextBox,["RB"]=v.RB,["LB"]=v.LB})
+			UpdateMinusOrPlusUI({["Name"]=v.Name,["Index"]=index,["Length"]=length,["List"]=v.List,["Frames"]=v.Frames,["TextBox"]=v.TextBox,["RB"]=v.RB,["LB"]=v.LB})
 			if v.Name=="jumppower" then
-				local result=nil
-				pcall(function()
-					GetHumanoid(LocalPlayer.Character,function(humanoid)
-						pcall(function()
-							result=v.List[humanoid.UseJumpPower][index]
-						end)
-					end)
+				GetHumanoid(LocalPlayer.Character,function(humanoid)
+					propertyName=`Jump{humanoid.UseJumpPower and "Power" or "Height"}`
+					v.Value=v.List[humanoid.UseJumpPower][index]
 				end)
-				v.Value=result
 			else
 				v.Value=v.List[index]
 			end
@@ -6168,6 +5922,7 @@ for k,v in ipairs(BarList) do
 				ExecuteCommand(`unloop{v.Name}`)
 			end
 			if v.Value then
+				if IsAlive(v.TextBox) then v.TextBox.Text=v.Name=="jumppower" and `{Strs.ToFloatString(v.Value)} [{propertyName}]` or `{Strs.ToFloatString(v.Value)}` end
 				if index==2 then
 					ExecuteCommand(`loop{v.Name} {v.Value}`)
 				end
@@ -6177,20 +5932,15 @@ for k,v in ipairs(BarList) do
 		v.Index=index
 	end)
 	v.LB.Activated:Connect(function()
-		local index,length=v.Index,v.Length
+		local index,length,propertyName=v.Index,v.Length,""
 		if index>1 then
 			index=index-1
-			UpdateMinusOrPlusUI({["CommandName"]=v.Name,["Index"]=index,["Length"]=length,["List"]=v.List,["Frames"]=v.Frames,["TextBox"]=v.TextBox,["RB"]=v.RB,["LB"]=v.LB})
+			UpdateMinusOrPlusUI({["Name"]=v.Name,["Index"]=index,["Length"]=length,["List"]=v.List,["Frames"]=v.Frames,["TextBox"]=v.TextBox,["RB"]=v.RB,["LB"]=v.LB})
 			if v.Name=="jumppower" then
-				local result=nil
-				pcall(function()
-					GetHumanoid(LocalPlayer.Character,function(humanoid)
-						pcall(function()
-							result=v.List[humanoid.UseJumpPower][index]
-						end)
-					end)
+				GetHumanoid(LocalPlayer.Character,function(humanoid)
+					propertyName=`Jump{humanoid.UseJumpPower and "Power" or "Height"}`
+					v.Value=v.List[humanoid.UseJumpPower][index]
 				end)
-				v.Value=result
 			else
 				v.Value=v.List[index]
 			end
@@ -6198,6 +5948,7 @@ for k,v in ipairs(BarList) do
 				ExecuteCommand(`unloop{v.Name}`)
 			end
 			if v.Value then
+				if IsAlive(v.TextBox) then v.TextBox.Text=v.Name=="jumppower" and `{Strs.ToFloatString(v.Value)} [{propertyName}]` or `{Strs.ToFloatString(v.Value)}` end
 				if index==2 then
 					ExecuteCommand(`loop{v.Name} {v.Value}`)
 				else
@@ -6209,27 +5960,32 @@ for k,v in ipairs(BarList) do
 	end)
 	v.TextBox.FocusLost:Connect(function(enterPress)
 		if not enterPress then return end
-		local inputText=v.TextBox.Text
-		local index=1
+		local inputText,index,realValue,value,propertyName=v.TextBox.Text,v.Value,v.Value,v.Index,""
 		if Strs.IsOriginal(inputText) then
-			index=1
-		else
+			index=1 value=v.List[1] realValue=value
+		else 
 			local inputNumber=tonumber(inputText)
-			if not inputNumber then return end
-			if v.Name=="jumppower" then
-				GetHumanoid(LocalPlayer.Character,function(humanoid)
-					local t=v.List[humanoid.UseJumpPower]
-					for j,o in ipairs(t) do if type(o)=="number" then if o<inputNumber then index=j end end end
-				end)
-			else
-				for j,o in ipairs(v.List) do if type(o)=="number" then if o<inputNumber then index=j end end end
+			if inputNumber then 
+				local newIndex=nil
+				if v.Name=="jumppower" then
+					GetHumanoid(LocalPlayer.Character,function(humanoid)
+						propertyName=`Jump{humanoid.UseJumpPower and "Power" or "Height"}`
+						for j,o in ipairs(v.List[humanoid.UseJumpPower]) do if type(o)=="number" then if o<=inputNumber then newIndex=j realValue=o end end end
+					end)
+				else
+					for j,o in ipairs(v.List) do if type(o)=="number" then if o<=inputNumber then newIndex=j realValue=o end end end
+				end
+				index=newIndex or 1
+				value=inputNumber
 			end
 		end
+		value=value or realValue
+		v.Index=index v.Value=realValue
 		if index<=1 then
 			ExecuteCommand(`unloop{v.Name}`)
 		end
-		UpdateMinusOrPlusUI({["CommandName"]=v.Name,["Index"]=index,["Length"]=v.Length,["List"]=v.List,["Frames"]=v.Frames,["TextBox"]=v.TextBox,["RB"]=v.RB,["LB"]=v.LB,["Value"]=inputText})
-		v.Index=index
+		UpdateMinusOrPlusUI({["Name"]=v.Name,["Index"]=index,["Length"]=v.Length,["List"]=v.List,["Frames"]=v.Frames,["TextBox"]=v.TextBox,["RB"]=v.RB,["LB"]=v.LB,["Value"]=inputText})
+		if IsAlive(v.TextBox) then v.TextBox.Text=v.Name=="jumppower" and `{Strs.ToFloatString(value)} [{propertyName}]` or `{Strs.ToFloatString(value)}` end
 		if index==2 then
 			ExecuteCommand(`loop{v.Name} {inputText}`)
 		else
@@ -6255,16 +6011,7 @@ if IsLegacyChat then
 		end
 	end)
 end
-ToolFrame.InfoButton.MouseButton1Click:Connect(function()
-	local enabled=ServerInfoEnabled
-	if not enabled then
-		ToolFrame.InfoButton.Text="Info (On)"
-		ExecuteCommand("info")
-	else
-		ToolFrame.ServerInfoButton.Text="Info (Off)"
-		ExecuteCommand("uninfo")
-	end
-end)
+
 local EnablesOrDisablesFrame=PlayerFrame.EnablesOrDisables
 EnablesOrDisablesFrame.Chosen.MouseButton1Click:Connect(function()
 	CoreGuiTypeIndex,EnablesOrDisablesFrame.Chosen.Text=NextValue(CoreGuiTypesList,CoreGuiTypeIndex)
@@ -6299,13 +6046,12 @@ end)
 PlayerFrame.BoostFPSButton.MouseButton1Click:Connect(function()
 	ExecuteCommand("boostfps")
 end)
-local ThirdPersonToggle=PlayerFrame.ThirdPersonToggle
-ThirdPersonToggle.Turns.BackgroundColor3=TurnColors[ThirdPersonEnabled]
-ThirdPersonToggle.MouseButton1Click:Connect(function()
-	ThirdPersonEnabled=LocalPlayer.CameraMode==Enum.CameraMode.Classic
-	ThirdPersonToggle.Turns.BackgroundColor3=TurnColors[ThirdPersonEnabled]
-	ExecuteCommand(`cameramode {ThirdPersonEnabled and "lockfirstperson" or "classic"}` )
+
+PlayerFrame.ThirdPersonToggle.Turns.BackgroundColor3=TurnColors[ThirdPersonEnabled]
+PlayerFrame.ThirdPersonToggle.MouseButton1Click:Connect(function()
+	ExecuteCommand("togglethirdperson")
 end)
+
 local UpdatesFrame=PlayerFrame.Updates
 UpdatesFrame.Chosen.MouseButton1Click:Connect(function()
 	UpdateIndex,UpdatesFrame.Chosen.Text=NextValue(UpdateList,UpdateIndex)
@@ -6320,116 +6066,69 @@ end)
 FixesFrame.Button.MouseButton1Click:Connect(function()
 	ExecuteCommand("fix"..string.lower(FixesFrame.Chosen.Text))
 end)
-CharacterFrame.ResetButton.MouseButton1Click:Connect(function()
-	ExecuteCommand("reset")
-end)
-CharacterFrame.RespawnButton.MouseButton1Click:Connect(function()
-	ExecuteCommand("respawn")
-end)
-CharacterFrame.WallHopButton.MouseButton1Click:Connect(function()
-	ExecuteCommand("wallhop")
-end)
-CharacterFrame.AimlockTypeChosen.MouseButton1Click:Connect(function()
-	local s=Values.AimType if s=="Player" then s="NPC" elseif s=="NPC" then s="All" else s="Player" end CharacterFrame.AimlockTypeChosen.Text="Type: "..s ExecuteCommand(`aimtype {s}`)
-end)
-CharacterFrame.AimlockTargetChosen.MouseButton1Click:Connect(function()
-	local s=Values.AimTargetType if s=="Head" then s="Root" else s="Head" end CharacterFrame.AimlockTargetChosen.Text="Target: "..s ExecuteCommand(`aimtarget {s}`)
-end)
-CharacterFrame.AimlockRangeBox.FocusLost:Connect(function(enterPress)
-	if not enterPress then return end ExecuteCommand(`aimrange {CharacterFrame.AimlockRangeBox.Text}`) CharacterFrame.AimlockRangeBox.Text=""
-end)
-CharacterFrame.AimlockToggle.MouseButton1Click:Connect(function()
-	ExecuteCommand(AimEnabled and "unaim" or `aim {Values.AimType} {Values.AimTargetType} {Values.AimRange}`)
-end)
-CharacterFrame.AutoJumpToggle.MouseButton1Click:Connect(function()
-	ExecuteCommand(AutoJumpEnabled and "unautojump" or "autojump")
-end)
-CharacterFrame.HitboxSizeBox.FocusLost:Connect(function(enterPress)
-	if not enterPress then return end ExecuteCommand(`hitboxsize {CharacterFrame.HitboxSizeBox.Text}`) CharacterFrame.HitboxSizeBox.Text=""
-end)
-CharacterFrame.HitboxToggle.MouseButton1Click:Connect(function()
-	ExecuteCommand(HitboxEnabled and "unhitbox" or `hitbox {Values.HitboxSize}`)
-end)
-CharacterFrame.SuperHitboxToggle.MouseButton1Click:Connect(function()
-	ExecuteCommand("togglesuperhitbox")
-end)
-CharacterFrame.InvisibleToggle.MouseButton1Click:Connect(function()
-	ExecuteCommand(InvisibleEnabled and "visible" or "invisible")
-end)
-CharacterFrame.GotoButton.MouseButton1Click:Connect(function()
-	if not IsAlive(PlayerInstance) then NotifyWarn("Goto","No player selected") return end ExecuteCommand(`goto {tostring(PlayerInstance.UserId)}`)
-end)
-CharacterFrame.BringButton.MouseButton1Click:Connect(function()
-	if not  IsAlive(PlayerInstance) then NotifyWarn("Bring","No player selected") return end  Notify("Bring",":)")
-end)
-CharacterFrame.FollowToggle.MouseButton1Click:Connect(function()
-	if not  IsAlive(PlayerInstance) then NotifyWarn("Follow","No player selected") return end ExecuteCommand(FollowEnabled and "unfollow" or `follow {tostring(PlayerInstance.UserId)}`)
-end)
-CharacterFrame.NoclipToggle.MouseButton1Click:Connect(function()
-	ExecuteCommand(NoclipEnabled and "clip" or "noclip")
-end)
-CharacterFrame.AntiFlingToggle.MouseButton1Click:Connect(function()
-	ExecuteCommand(AntiFlingEnabled and `unantifling` or `antifling`)
-end)
-CharacterFrame.SpinSpeedBox.FocusLost:Connect(function(enterPress)
-	if not enterPress then return end ExecuteCommand(`spinspeed {CharacterFrame.SpinSpeedBox.Text}`) CharacterFrame.SpinSpeedBox.Text=""
-end)
-CharacterFrame.SpinToggle.MouseButton1Click:Connect(function()
-	ExecuteCommand(SpinEnabled and "unspin" or `spin {Values.SpinSpeed}`)
-end)
-CharacterFrame.FlySpeedBox.FocusLost:Connect(function(enterPress)
-	if not enterPress then return end ExecuteCommand(`flyspeed {CharacterFrame.FlySpeedBox.Text}`) CharacterFrame.FlySpeedBox.Text=""
-end)
-CharacterFrame.FlyToggle.MouseButton1Click:Connect(function()
-	ExecuteCommand(FlyEnabled and "unfly" or `fly {Values.FlySpeed}`)
-end)
-CharacterFrame.NoHatToggle.MouseButton1Click:Connect(function()
-	ExecuteCommand(NoAccessoryEnabled and "reaccessory" or "noaccessory")
-end)
-CharacterFrame.ESPPlayerToggle.MouseButton1Click:Connect(function()
-	ExecuteCommand(ESPEnabled and "unesp" or "esp")
-end)
-CharacterFrame.ESPNPCToggle.MouseButton1Click:Connect(function()
-	ExecuteCommand(ESPNPCEnabled and "unespnpc" or "espnpc")
-end)
-CharacterFrame.DanceButton.MouseButton1Click:Connect(function()
-	ExecuteCommand("dance")
-end)
-CharacterFrame.NoDanceButton.MouseButton1Click:Connect(function()
-	ExecuteCommand("nodance")
-end)
-CharacterFrame.AnimSpeedBox.FocusLost:Connect(function(enterPress)
-	if not enterPress then return end ExecuteCommand(`animspeed {CharacterFrame.AnimSpeedBox.Text}`) CharacterFrame.AnimSpeedBox.Text=""
-end)
-CharacterFrame.BoostAnimToggle.MouseButton1Click:Connect(function()
-	ExecuteCommand(BoostAnimEnabled and `unboostanim` or `boostanim {Values.AnimSpeed}`)
-end)
-CharacterFrame.IdleAnimToggle.MouseButton1Click:Connect(function()
-	ExecuteCommand(IdleAnimEnabled and "unidleanim" or "idleanim")
-end)
-LightingFrame.DayOrNightButton.MouseButton1Click:Connect(function()
-	ExecuteCommand(Lighting.ClockTime<=0 and "day" or "night")
-end)
-LightingFrame.DiscoToggle.MouseButton1Click:Connect(function()
-	ExecuteCommand(DiscoEnabled and "undisco" or "disco")
-end)
-LightingFrame.NoFogButton.MouseButton1Click:Connect(function()
-	ExecuteCommand("nofog")
-end)
-ToolFrame.TeleportToolButton.MouseButton1Click:Connect(function()
-	ExecuteCommand(TeleportToolEnabled and "untptool" or "tptool")
-end)
-ToolFrame.FlashlightButton.MouseButton1Click:Connect(function()
-	ExecuteCommand(FlashlightToolEnabled and "unflashlighttool" or "flashlighttool")
-end)
-ToolFrame.ESPToolButton.MouseButton1Click:Connect(function()
-	ExecuteCommand(ESPToolEnabled and "unesptool" or "esptool")
-end)
-ToolFrame.F3xButton.MouseButton1Click:Connect(function()
-	ExecuteCommand("f3x")
-end)
-ToolFrame.GlassBridgeToolButton.MouseButton1Click:Connect(function()
-	ExecuteCommand("glassbridgetool")
-end)
+
+CharacterCommandList={
+	{CharacterFrame.AnimPanelButton,function() Notify("Animation Panel","Coming Soon") end,"Button"},
+	{CharacterFrame.ResetButton,function() return "reset" end,"Button"},
+	{CharacterFrame.RespawnButton,function() return "respawn" end,"Button"},
+	{CharacterFrame.BringButton,function() if not IsAlive(PlayerInstance) then NotifyWarn("Bring","No player selected") return nil end Notify("Bring",":)") return nil end,"Button"},
+	{CharacterFrame.GotoButton,function() if not IsAlive(PlayerInstance) then NotifyWarn("Goto","No player selected") return nil end return `goto {tostring(PlayerInstance.UserId)}` end,"Button"},
+	{CharacterFrame.WallHopButton,function() return "wallhop" end,"Button"},
+	{CharacterFrame.AimlockTypeChosen,function() local s=Values.AimType if s=="Player" then s="NPC" elseif s=="NPC" then s="All" else s="Player" end CharacterFrame.AimlockTypeChosen.Text="Type: "..s return `aimtype {s}` end,"Button"},
+	{CharacterFrame.AimlockTargetChosen,function() local s=Values.AimTargetType if s=="Head" then s="Root" else s="Head" end CharacterFrame.AimlockTargetChosen.Text="Target: "..s return `aimtarget {s}` end,"Button"},
+	{CharacterFrame.AimlockRangeBox,function(enterPress,text) return enterPress and `aimrange {text}` or nil end,"TextBox"},
+	{CharacterFrame.AimlockToggle,function() return AimEnabled and "unaim" or `aim {Values.AimType} {Values.AimTargetType} {Values.AimRange}` end,"Button"},
+	{CharacterFrame.AutoJumpToggle,function() return AutoJumpEnabled and "unautojump" or "autojump" end,"Button"},
+	{CharacterFrame.HitboxSizeBox,function(enterPress,text) return enterPress and `hitboxsize {text}` or nil end,"TextBox"},
+	{CharacterFrame.HitboxToggle,function() return HitboxEnabled and "unhitbox" or `hitbox {Values.HitboxSize}` end,"Button"},
+	{CharacterFrame.SuperHitboxToggle,function() return "togglesuperhitbox" end,"Button"},
+	{CharacterFrame.InvisibleToggle,function() return InvisibleEnabled and "visible" or "invisible" end,"Button"},
+	{CharacterFrame.FollowToggle,function() if not IsAlive(PlayerInstance) then NotifyWarn("Follow","No player selected") return nil end return FollowEnabled and "unfollow" or `follow {tostring(PlayerInstance.UserId)}` end,"Button"},
+	{CharacterFrame.NoclipToggle,function() return NoclipEnabled and "clip" or "noclip" end,"Button"},
+	{CharacterFrame.AntiFlingToggle,function() return AntiFlingEnabled and `unantifling` or `antifling` end,"Button"},
+	{CharacterFrame.SpinSpeedBox,function(enterPress,text) return enterPress and `spinspeed {text}` or nil end,"TextBox"},
+	{CharacterFrame.SpinToggle,function() return SpinEnabled and "unspin" or `spin {Values.SpinSpeed}` end,"Button"},
+	{CharacterFrame.FlySpeedBox,function(enterPress,text) return enterPress and `flyspeed {text}` or nil end,"TextBox"},
+	{CharacterFrame.FlyToggle,function() return FlyEnabled and "unfly" or `fly {Values.FlySpeed}` end,"Button"},
+	{CharacterFrame.NoHatToggle,function() return NoAccessoryEnabled and "reaccessory" or "noaccessory" end,"Button"},
+	{CharacterFrame.ESPPlayerToggle,function() return ESPEnabled and "unesp" or "esp" end,"Button"},
+	{CharacterFrame.ESPNPCToggle,function() return ESPNPCEnabled and "unespnpc" or "espnpc" end,"Button"},
+	{CharacterFrame.AnimSpeedBox,function(enterPress,text) return enterPress and `animspeed {text}` or nil end,"TextBox"},
+	{CharacterFrame.BoostAnimToggle,function() return BoostAnimEnabled and `unboostanim` or `boostanim {Values.AnimSpeed}` end,"Button"},
+	{CharacterFrame.IdleAnimToggle,function() return IdleAnimEnabled and "unidleanim" or "idleanim" end,"Button"},
+	{CharacterFrame.DanceButton,function() return "dance" end,"Button"},
+	{CharacterFrame.NoDanceButton,function() return "nodance" end,"Button"}
+}
+
+for i,v in ipairs(CharacterCommandList) do 
+	if v[3]=="TextBox" then
+		v[1].FocusLost:Connect(function(enterPress)
+			local s=v[2](enterPress,v[1].Text) if s then ExecuteCommand(s) v[1].Text="" end 
+		end)
+	else
+		v[1].MouseButton1Click:Connect(function() 
+			local s=v[2]() if s then ExecuteCommand(s) end 
+		end) 
+	end
+end
+
+LightingCommandList={
+	{LightingFrame.DayOrNightButton,function() return Lighting.ClockTime<=0 and "day" or "night" end},
+	{LightingFrame.DiscoToggle,function() return DiscoEnabled and "undisco" or "disco" end},
+	{LightingFrame.NoFogButton,function() return "nofog" end}
+}
+for i,v in ipairs(LightingCommandList) do v[1].MouseButton1Click:Connect(function() ExecuteCommand(v[2]()) end) end
+
+ToolCommandList={
+	{ToolFrame.InfoButton,function() return not InfoEnabled and "info" or "uninfo" end},
+	{ToolFrame.TeleportToolButton,function() return TeleportToolEnabled and "untptool" or "tptool" end},
+	{ToolFrame.FlashlightButton,function() return FlashlightToolEnabled and "unflashlighttool" or "flashlighttool" end},
+	{ToolFrame.ESPToolButton,function() return ESPToolEnabled and "unesptool" or "esptool" end},
+	{ToolFrame.GlassBridgeToolButton,function() Notify("Glass Bridge Tool","Coming Soon") return nil end},
+	{ToolFrame.F3xButton,function() return "f3x" end}
+}
+
+for i,v in ipairs(ToolCommandList) do v[1].MouseButton1Click:Connect(function() local s=v[2]() if s then ExecuteCommand(s) end end) end
+
 OpenButton.Visible=true
 Notify("Maswa","Maswa Loaded")
