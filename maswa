@@ -68,7 +68,7 @@ local PlayerInstance=LocalPlayer
 local PlaceId,JobId=game.PlaceId,game.JobId
 local InputPriority=Enum.ContextActionPriority.High.Value
 
-local Prefix=";"
+local Prefix="/"
 
 local Saved={
 	["Player"]={
@@ -125,13 +125,13 @@ local CoreGuiTypeIndex,CoreGuiTypesList=1,{"Inventory","Leaderboard","Emotes","C
 local FixIndex,Fixes=1,{"Lighting","Camera","Player","Accessory","Boost","Other","All"}
 local UpdateIndex,UpdateList=1,{"Boost","Player","All"}
 
-local FlyCache,TeleportToolCache,FlashlightToolCache,ESPToolCache,ESPToolObjectCache,ESPCache,ESPNPCCache,HitboxCache={},{},{},{},{},{},{},{}
+local InfoCache,FlyCache,TeleportToolCache,FlashlightToolCache,ESPToolCache,ESPToolObjectCache,ESPCache,ESPNPCCache,HitboxCache={},{},{},{},{},{},{},{},{}
 local SelectIndex,SelectInfo=1,nil
 local raycastParams=RaycastParams.new()
 local TurnVisible;
 local DanceInstance,SpinInstance,AimInstance,ViewInstance;
 local InfoEnabled,ThirdPersonEnabled,DiscoEnabled,MaxZoomEnabled,MinZoomEnabled,AimEnabled,ESPEnabled,ESPNPCEnabled,BoostAnimEnabled,IdleAnimEnabled,AntiFlingEnabled,WalkSpeedEnabled,HealthEnabled,JumpEnabled,InvisibleEnabled,SpinEnabled,FollowEnabled,NoclipEnabled,FlyEnabled,ViewEnabled,AutoJumpEnabled,NoAccessoryEnabled,HitboxEnabled,SuperHitboxEnabled,TeleportToolEnabled,ESPToolEnabled,FlashlightToolEnabled=false,LocalPlayer.CameraMode==Enum.CameraMode.Classic,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false
-local AFKIdled,AntiLagObjectAdded,SpinCharAdded,AntiFlingCharAdded,ViewCharAdded,AntiFlingAdded,FollowLooped,AutoJumpLooped,NoclipLooped,AimLooped,SIPlaceNamePressed,SIPlaceIdPressed,SIPlayerNamePressed,SIPlayerIdPressed,SIAppearancePressed,SILoopThread,MaxZoomThread,MinZoomThread,DiscoThread,WalkSpeedThread,HealthThread,JumpThread,DanceAnimTrack,BoostAnimThread,SpinThread;
+local AFKIdled,AntiLagObjectAdded,SpinCharAdded,AntiFlingCharAdded,ViewCharAdded,AntiFlingAdded,FollowLooped,AutoJumpLooped,NoclipLooped,AimLooped,MaxZoomThread,MinZoomThread,DiscoThread,WalkSpeedThread,HealthThread,JumpThread,DanceAnimTrack,BoostAnimThread,SpinThread;
 local Values={["MaxZoom"]=40,["MinZoom"]=0.5,["WalkSpeed"]=16,["Health"]=100,["Jump"]=50,["FlySpeed"]=100,["SpinSpeed"]=9999,["AnimSpeed"]=2,["HitboxSize"]=1,["AimType"]="Player",["AimTargetType"]="Head",["AimRange"]=15}
 
 for i,v in ipairs(Enum.CoreGuiType:GetEnumItems()) do CoreGuiTypes[string.lower(v.Name)]=v end
@@ -3362,7 +3362,7 @@ function CreateUI(parent)
 	MASWA.Versi.Position=UDim2.new(0.237141356,0,0.0618038923,0)
 	MASWA.Versi.Size=UDim2.new(0.222316161,0,0.0563920774,0)
 	MASWA.Versi.Font=Enum.Font.FredokaOne
-	MASWA.Versi.Text="v1.0.0"
+	MASWA.Versi.Text="v1.1.5"
 	MASWA.Versi.TextColor3=Color3.fromRGB(255,255,255)
 	MASWA.Versi.TextScaled=true
 	MASWA.Versi.TextWrapped=true
@@ -3429,7 +3429,7 @@ function CreateUI(parent)
 
 	MASWA.UICorner_2.CornerRadius=UDim.new(0,32)
 	MASWA.UICorner_2.Parent=MASWA.Open
-	
+
 	return MASWA.MASWA
 end
 function GrabUI(frame)
@@ -3624,32 +3624,32 @@ function GetSelectInfoOrLocalPlayer()
 end
 
 function OpenInfo(enabled)
+	InfoEnabled=enabled
 	if enabled then
-		if InfoEnabled then return end InfoEnabled=true
 		local maxPlayers,placeName,userId,userName,appearanceId;
 		InfoScroller.PlaceIds.Title.Text=`Place Id: {PlaceId}`
-		Cleanup(SIPlaceNamePressed)
-		SIPlaceNamePressed=InfoScroller.PlaceNames.Copy.MouseButton1Click:Connect(function()
+		InfoCache.PlaceNamePressed=Cleanup(InfoCache.PlaceNamePressed)
+		InfoCache.PlaceNamePressed=InfoScroller.PlaceNames.Copy.MouseButton1Click:Connect(function()
 			if placeName then toClipboard(placeName) end
 		end)
-		Cleanup(SIPlaceIdPressed)
-		SIPlaceIdPressed=InfoScroller.PlaceIds.Copy.MouseButton1Click:Connect(function()
+		InfoCache.PlaceIdPressed=Cleanup(InfoCache.PlaceIdPressed)
+		InfoCache.PlaceIdPressed=InfoScroller.PlaceIds.Copy.MouseButton1Click:Connect(function()
 			toClipboard(tostring(PlaceId))
 		end)
-		Cleanup(SIPlayerNamePressed)
-		SIPlayerNamePressed=InfoScroller.PlayerNames.Copy.MouseButton1Click:Connect(function()
+		InfoCache.PlayerNamePressed=Cleanup(InfoCache.PlayerNamePressed)
+		InfoCache.PlayerNamePressed=InfoScroller.PlayerNames.Copy.MouseButton1Click:Connect(function()
 			if userName then toClipboard(userName) end
 		end)
-		Cleanup(SIPlayerIdPressed)
-		SIPlayerIdPressed=InfoScroller.PlayerIds.Copy.MouseButton1Click:Connect(function()
+		InfoCache.PlayerIdPressed=Cleanup(InfoCache.PlayerIdPressed)
+		InfoCache.PlayerIdPressed=InfoScroller.PlayerIds.Copy.MouseButton1Click:Connect(function()
 			if userId then toClipboard(userId) end
 		end)
-		Cleanup(SIAppearancePressed)
-		SIAppearancePressed=InfoScroller.Appearances.Copy.MouseButton1Click:Connect(function()
+		InfoCache.AppearancePressed=Cleanup(InfoCache.AppearancePressed)
+		InfoCache.AppearancePressed=InfoScroller.Appearances.Copy.MouseButton1Click:Connect(function()
 			if appearanceId then toClipboard(tostring(appearanceId)) end
 		end)
-		Cleanup(SILoopThread)
-		SILoopThread=coroutine.create(function()
+		InfoCache.LoopThread=Cleanup(InfoCache.AppearancePressed)
+		InfoCache.LoopThread=coroutine.create(function()
 			while InfoEnabled do
 				local Asset=GetProductInfo(PlaceId)
 				if Asset then placeName=Asset.Name else if workspace.Parent then placeName=workspace.Parent.Name end end
@@ -3678,7 +3678,7 @@ function OpenInfo(enabled)
 				task.wait(1)
 			end
 		end)
-		coroutine.resume(SILoopThread)
+		coroutine.resume(InfoCache.LoopThread)
 		task.delay(0.25,function()
 			MenuFrame.Visible=true
 			OpenButton.Visible=MenuFrame.Visible~=true
@@ -3687,9 +3687,7 @@ function OpenInfo(enabled)
 			BackButton.Visible=true
 		end)
 	else
-		if not InfoEnabled then return end
-		InfoEnabled=false
-		SIPlaceNamePressed,SIPlaceIdPressed,SIPlayerIdPressed,SIAppearancePressed,SILoopThread=ClearCache({SIPlaceNamePressed,SIPlaceIdPressed,SIPlayerIdPressed,SIAppearancePressed,SILoopThread})
+		ClearCache(InfoCache)
 		InfoScroller.Visible=false
 		ButtonScroller.Visible=true
 		BackButton.Visible=false
@@ -4551,7 +4549,7 @@ function GetNearest(mode,range)
 		local orp=GetRootPart(char)
 		local rp=GetRootPart(LocalPlayer.Character)
 		if not rp or not orp then continue end
-		
+
 		local distance=math.floor((orp.Position-rp.Position).Magnitude)
 		if distance<=range and distance<lastDistance then
 			value=char
@@ -5081,6 +5079,10 @@ for k,t in ipairs({{"Player","maxzoom",10,PlayerFrame.MaxZooms},{"Player","minzo
 	BarList[index]=data
 end
 
+AddCommand({"prefix"},function(s)
+	if s then Prefix=s Notify("Prefix","Prefix has been updated") end
+end)
+
 AddCommand({"info"},function()
 	OpenInfo(true)
 end)
@@ -5133,7 +5135,7 @@ AddCommand({"f3x","btool"},function()
 	loadstring(game:HttpGet("https://raw.githubusercontent.com/infyiff/backup/refs/heads/main/f3x.lua"))()
 end)
 
-AddCommand({"grabobject","instalobject"},"Give you grab object panel",function()
+AddCommand({"grabobject","instalobject"},function()
 	if IsStudio then return end
 	Notify("Grab Object","Hold on a sec")
 	loadstring(game:HttpGet("https://pastebin.com/raw/KXmWn38Q"))()
@@ -5197,7 +5199,7 @@ AddCommand({"screenshot","scrnshot"},function(args, speaker)
 	return CoreGui:TakeScreenshot()
 end)
 
-AddCommand({"rejoin","rj"},"Makes you rejoin the game",function()
+AddCommand({"rejoin","rj"},function()
 	if IsStudio then return end
 	Notify("Rejoin","Rejoining...")
 	local player=LocalPlayer
@@ -5210,7 +5212,7 @@ AddCommand({"rejoin","rj"},"Makes you rejoin the game",function()
 	end
 end)
 
-AddCommand({"serverhop","shop"},"Teleports you to a different server",function()
+AddCommand({"serverhop","shop"},function()
 	if IsStudio then return end
 	local servers={}
 	local req=game:HttpGet("https://games.roblox.com/v1/games/"..PlaceId.."/servers/Public?sortOrder=Description&limit=100&excludeFullGames=true")
@@ -6001,17 +6003,19 @@ end
 
 if not IsLegacyChat then
 	LocalPlayerChattedConnection=LocalPlayer.Chatted:Connect(OnChatted)
-end
-if IsLegacyChat then
+else
 	TextChatService.MessageReceived:Connect(function(message)
 		if message.TextSource then
-			local player=Players:GetPlayerByUserId(message.TextSource.UserId)
-			if not player or player.UserId~=LocalPlayer.UserId then return end
-			local text=message.Text if string.sub(text,1,1)==Prefix then ExecuteCommand(text) end
+			local player=GetPlayer(message.TextSource.UserId)
+			if player and player.UserId==LocalPlayer.UserId then
+				local text=message.Text 
+				if string.sub(text,1,1)==Prefix then 
+					ExecuteCommand(text) 
+				end
+			end
 		end
 	end)
 end
-
 local EnablesOrDisablesFrame=PlayerFrame.EnablesOrDisables
 EnablesOrDisablesFrame.Chosen.MouseButton1Click:Connect(function()
 	CoreGuiTypeIndex,EnablesOrDisablesFrame.Chosen.Text=NextValue(CoreGuiTypesList,CoreGuiTypeIndex)
