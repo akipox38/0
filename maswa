@@ -39,13 +39,14 @@ UserService=game:GetService("UserService")
 
 local IsStudio=RunService:IsStudio()
 local IsLegacyChat=TextChatService.ChatVersion==Enum.ChatVersion.LegacyChatService
+local MainCache={}
 
 local LocalCamera=workspace.CurrentCamera
-workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function() LocalCamera=workspace.CurrentCamera end)
+MainCache.CurrentCameraChanged=workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function() LocalCamera=workspace.CurrentCamera end)
 
 local LocalPlayerChattedConnection=nil
 local LocalPlayer=Players.LocalPlayer
-Players:GetPropertyChangedSignal("LocalPlayer"):Connect(function() 
+MainCache.LocalPlayerChanged=Players:GetPropertyChangedSignal("LocalPlayer"):Connect(function() 
 	LocalPlayer=Players.LocalPlayer 
 	if LocalPlayerChattedConnection then
 		LocalPlayerChattedConnection:Disconnect()
@@ -128,6 +129,8 @@ local UpdateIndex,UpdateList=1,{"Boost","Player","All"}
 local InfoCache,FlyCache,TeleportToolCache,FlashlightToolCache,ESPToolCache,ESPToolObjectCache,ESPCache,ESPNPCCache,HitboxCache={},{},{},{},{},{},{},{},{}
 local SelectIndex,SelectInfo=1,nil
 local raycastParams=RaycastParams.new()
+local aimRaycastParams=RaycastParams.new()
+aimRaycastParams.FilterType=Enum.RaycastFilterType.Exclude
 local TurnVisible;
 local DanceInstance,SpinInstance,AimInstance,ViewInstance;
 local InfoEnabled,ThirdPersonEnabled,DiscoEnabled,MaxZoomEnabled,MinZoomEnabled,AimEnabled,ESPEnabled,ESPNPCEnabled,BoostAnimEnabled,IdleAnimEnabled,AntiFlingEnabled,WalkSpeedEnabled,HealthEnabled,JumpEnabled,InvisibleEnabled,SpinEnabled,FollowEnabled,NoclipEnabled,FlyEnabled,ViewEnabled,AutoJumpEnabled,NoAccessoryEnabled,HitboxEnabled,SuperHitboxEnabled,TeleportToolEnabled,ESPToolEnabled,FlashlightToolEnabled=false,LocalPlayer.CameraMode==Enum.CameraMode.Classic,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false
@@ -319,6 +322,7 @@ end
 function ClearCache(t)
 	for k,v in t do t[k]=Cleanup(v) end return unpack(t)
 end
+
 function IsAlive(v)
 	return (typeof(v)=="Instance" and typeof(v.Parent)=="Instance") and true or false
 end
@@ -3362,7 +3366,7 @@ function CreateUI(parent)
 	MASWA.Versi.Position=UDim2.new(0.237141356,0,0.0618038923,0)
 	MASWA.Versi.Size=UDim2.new(0.222316161,0,0.0563920774,0)
 	MASWA.Versi.Font=Enum.Font.FredokaOne
-	MASWA.Versi.Text="v1.1.5"
+	MASWA.Versi.Text="v1.1.8"
 	MASWA.Versi.TextColor3=Color3.fromRGB(255,255,255)
 	MASWA.Versi.TextScaled=true
 	MASWA.Versi.TextWrapped=true
@@ -3524,11 +3528,11 @@ function CloseMenu()
 	OpenButton.Visible=true
 end
 
-OpenButton.MouseButton1Click:Connect(function()
+MainCache.OpenPressed=OpenButton.MouseButton1Click:Connect(function()
 	OpenMenu()
 end)
 
-CloseButton.MouseButton1Click:Connect(function()
+MainCache.ClosePressed=CloseButton.MouseButton1Click:Connect(function()
 	CloseMenu()
 end)
 
@@ -3696,7 +3700,7 @@ function OpenInfo(enabled)
 	Notify("Info",enabled and "Open information" or "Close information")
 end
 
-BackButton.MouseButton1Click:Connect(function()
+MainCache.BackPressed=BackButton.MouseButton1Click:Connect(function()
 	OpenInfo(false)
 	ButtonScroller.Visible=true
 	BackButton.Visible=false
@@ -4092,46 +4096,40 @@ function EnableESP(enabled)
 end
 
 function RemoveESPNPC(value)
-	local espNPCFolder=ESPNPCCache[value]
-	if espNPCFolder then
-		Cleanup(espNPCFolder)
-		ESPNPCCache[value]=nil
-	end
+	local espNPCFolder=ESPNPCCache[value] if espNPCFolder then ESPNPCCache[value]=nil end
 end
 
 function ESPNPC(npc)
 	task.spawn(function()
 		if not ESPNPCEnabled or IsDied(npc) then return end
 		if ESPNPCCache[npc] then return end
-		local npcName=npc.Name
+		ESPNPCCache[npc]=true
+		local npcName,npcHighlights=npc.Name,{}
 		local espNPCFolder=Instance.new("Folder")
 		espNPCFolder.Name=npcName.."_ESP_NPC"
 		espNPCFolder.Parent=CoreGui
-		ESPNPCCache[npc]=espNPCFolder
-		task.spawn(function()
-			for i,v in ipairs(npc:GetChildren()) do
-				if ESPNPCEnabled and IsAlive(espNPCFolder) and IsAlive(v) and v:IsA("BasePart") then
-					local a=Instance.new("BoxHandleAdornment")
-					a.Name=Strs.RandomString()
-					a.Parent=espNPCFolder
-					a.Adornee=v
-					a.AlwaysOnTop=true
-					a.ZIndex=10
-					a.Size=v.Size
-					a.Transparency=0.75
-					a["Color"]=BrickColor.new("Brown")
-				end
+		for i,v in ipairs(npc:GetChildren()) do
+			if ESPNPCEnabled and ESPNPCCache[npc] and IsAlive(v) and v:IsA("BasePart") then
+				local a=Instance.new("BoxHandleAdornment")
+				a.Name=Strs.RandomString()
+				a.Parent=espNPCFolder
+				a.Adornee=v
+				a.AlwaysOnTop=true
+				a.ZIndex=10
+				a.Size=v.Size
+				a.Transparency=0.75
+				a["Color"]=BrickColor.new("Brown")
+				table.insert(npcHighlights,a)
 			end
-		end)
-		local function ESPNPCNameTagLoop()
-			repeat task.wait(1) until not ESPNPCEnabled or IsDied(npc) or GetHeadPart(npc)~=nil
-			if not ESPNPCEnabled or IsDied(npc) then return end
+		end
+		local hp,studs,billboardGui,textLabel,npcLooped=0,0,nil,nil,nil
+		local function NPCNameTag()
+			repeat task.wait(1) until not (ESPNPCEnabled and ESPNPCCache[npc]) or IsDied(npc) or GetHeadPart(npc)~=nil
+			if not (ESPNPCEnabled and ESPNPCCache[npc]) or IsDied(npc) then return end
 			local head=GetHeadPart(npc)
 			if IsAlive(head) then
-				local studs=0
-				local hp=100
-				local billboardGui=Instance.new("BillboardGui")
-				local textLabel=Instance.new("TextLabel")
+				billboardGui=Instance.new("BillboardGui")
+				billboardGui=Instance.new("TextLabel")
 				billboardGui.Adornee=head
 				billboardGui.Name=npcName
 				billboardGui.Parent=espNPCFolder
@@ -4149,31 +4147,27 @@ function ESPNPC(npc)
 				textLabel.TextYAlignment=Enum.TextYAlignment.Bottom
 				textLabel.Text="Name: "..tostring(npcName)
 				textLabel.ZIndex=10
-				local espNPCLoopConnection=nil
-				local function EspLoop()
-					if ESPNPCEnabled and not IsDied(npc) and IsAlive(espNPCFolder) then
-						local otherRootPart=GetRootPart(npc)
-						local myRootPart=GetRootPart(LocalPlayer.Character)
-						if otherRootPart and myRootPart then
-							local distance=otherRootPart.Position-myRootPart.Position
-							studs=math.floor(distance.Magnitude)
-						end
-						GetHumanoid(npc,function(v) hp=Round(v.Health,1) end)
-						textLabel.Text=`Name: {npcName} | Health: {hp} | Studs: {studs}`
-					else
-						if espNPCLoopConnection then 
-							espNPCLoopConnection:Disconnect() 
-							espNPCLoopConnection=nil 
-							RemoveESPNPC(npc)
-						end
-					end
-				end
-				espNPCLoopConnection=RunService.RenderStepped:Connect(EspLoop)
 			else
-				ESPNPCNameTagLoop()
+				NPCNameTag()
 			end
 		end
-		task.spawn(ESPNPCNameTagLoop)
+		local npcThread=coroutine.create(NPCNameTag)
+		coroutine.resume(NPCNameTag)
+		local function NPCLoop()
+			if ESPNPCEnabled and ESPNPCCache[npc] and not IsDied(npc) then
+				local otherRootPart=GetRootPart(npc)
+				local rootPart=GetRootPart(LocalPlayer.Character)
+				if otherRootPart and rootPart then
+					local distance=otherRootPart.Position-rootPart.Position
+					studs=math.floor(distance.Magnitude)
+				end
+				GetHumanoid(npc,function(v) hp=Round(v.Health,1) end)
+				if textLabel then textLabel.Text=`Name: {npcName} | Health: {hp} | Studs: {studs}` end
+			else
+				npcLooped=Cleanup(npcLooped) ClearCache(npcHighlights) npcHighlights={} npcThread=Cleanup(npcThread) textLabel=nil billboardGui=Cleanup(billboardGui) RemoveESPNPC(npc)
+			end
+		end
+		npcLooped=RunService.RenderStepped:Connect(NPCLoop)
 	end)
 end
 
@@ -4500,9 +4494,13 @@ function CreateAndPlayDanceAnimation(humanoid,animationId)
 	DanceAnimTrack:Play()
 end
 
-function EnableDance(enabled,player)
+function RemoveDance()
 	if DanceAnimTrack then DanceAnimTrack:Stop() DanceAnimTrack:Destroy() DanceAnimTrack=nil end
 	if DanceInstance then DanceInstance:Destroy() DanceInstance=nil end
+end
+
+function EnableDance(enabled,player)
+	RemoveDance()
 	if enabled then
 		local humanoid=GetHumanoid(player.Character)
 		if IsAlive(humanoid) then
@@ -4517,18 +4515,41 @@ function EnableDance(enabled,player)
 	end
 end
 
+function CanSee(rayParams,originPart,targetPart,maxAngle)
+	local facingDirection=originPart.CFrame.LookVector
+	local direction=(targetPart.Position-originPart.Position).Unit
+	local dotProduct=facingDirection:Dot(direction)
+	local cosineAngle=math.cos(math.rad(maxAngle))
+	if dotProduct>=cosineAngle then
+		local target=targetPart.Parent
+		if not target then return false end
+
+		local ray=workspace:Raycast(
+			originPart.Position,
+			(targetPart.Position-originPart.Position).Unit*(targetPart.Position-originPart.Position).Magnitude,
+			rayParams
+		)
+		if ray and ray.Instance  then
+			if ray.Instance == target or target:IsAncestorOf(ray.Instance) then
+				return true
+			end
+		end
+	end
+	return false
+end
+
 function GetNearest(mode,range)
 	local userId=LocalPlayer.UserId
-	local value,lastDistance=nil,math.huge
+	local value,lastDistance,fovThreshold=nil,math.huge,1
 	local characters={}
-	if mode=="Player" then
+	if mode=="Player" or mode=="Team" then
 		for i,v in ipairs(PlayerList) do
 			local player=v.Value
 			if IsAlive(player) and player.UserId~=userId then
 				table.insert(characters,player.Character)
 			end
 		end
-	elseif mode=="NPC" then
+	elseif mode=="Zombie" or mode=="NPC" then
 		characters=NPCList
 	elseif mode=="All" then
 		for i,v in ipairs(PlayerList) do
@@ -4543,17 +4564,20 @@ function GetNearest(mode,range)
 	else
 		return value,lastDistance
 	end
+	aimRaycastParams.FilterDescendantsInstances=characters
 	for i,char in ipairs(characters) do
 		if IsDied(char) then continue end
-
-		local orp=GetRootPart(char)
-		local rp=GetRootPart(LocalPlayer.Character)
-		if not rp or not orp then continue end
-
+		local rp,orp,humanoid=GetRootPart(LocalPlayer.Character),GetRootPart(char),GetHumanoid(char) :: Humanoid
+		if not (rp and orp) then continue end
 		local distance=math.floor((orp.Position-rp.Position).Magnitude)
 		if distance<=range and distance<lastDistance then
-			value=char
-			lastDistance=distance
+			local isFront=CanSee(aimRaycastParams,orp,rp,90)
+			if isFront then
+				if mode=="Zombie" then if not humanoid or (IsAlive(char) and not string.find(string.lower(char.Parent.Name),"zombie")) or humanoid.MoveDirection.Magnitude<=0 then continue end end
+				if mode=="Team" then local player=GetPlayer(char) if not player or player.TeamColor==LocalPlayer.TeamColor then continue end end
+				value=char
+				lastDistance=distance
+			end
 		end
 	end
 	characters={}
@@ -4561,14 +4585,14 @@ function GetNearest(mode,range)
 end
 
 function EnableAim(no,player,s1,s2,s3)
-	if s1 then s1=string.lower(s1) if Strs.IsOriginal(s1) then s1=Saved.Values.AimType else if s1=="player" then s1="Player" elseif s1=="npc" then s1="NPC" elseif s1=="all" then s1="All" else s1=nil end end end
+	if s1 then s1=string.lower(s1) if Strs.IsOriginal(s1) then s1=Saved.Values.AimType else if s1=="player" then s1="Player" elseif s1=="team" then s1="Team" elseif s1=="npc" then s1="NPC" elseif s1=="zombie" then s1="Zombie" elseif s1=="all" then s1="All" else s1=nil end end end
 	if s2 then s2=string.lower(s2) if Strs.IsOriginal(s2) then s2=Saved.Values.AimTargetType else if s2=="head" then s2="Head" elseif s2=="root" then s2="Root" else s2=nil end end end
 	Values.AimType=s1 or Values.AimType
 	Values.AimTargetType=s2 or Values.AimTargetType
 	Values.AimRange=Strs.GetNumber(s3,Saved.Values.AimRange) or Values.AimRange
 	if no==1 or no==0 then
 		if no==1 then
-			if Values.AimType=="NPC" then
+			if Values.AimType=="NPC" or Values.AimType=="Zombie" then
 				if #NPCList<=0 then
 					NotifyWarn("Aimlock","NPCs is empty")
 					return
@@ -4578,7 +4602,6 @@ function EnableAim(no,player,s1,s2,s3)
 					NotifyWarn("Aimlock","Players is empty")
 					return
 				end
-
 			elseif Values.AimType=="All" then
 				if #NPCList<=0 and (#PlayerList-1)<=0 then
 					NotifyWarn("Aimlock","Players and NPCs is empty")
@@ -4594,23 +4617,29 @@ function EnableAim(no,player,s1,s2,s3)
 			AimLooped=RunService.RenderStepped:Connect(function()
 				if not IsAlive(player) then AimLooped=Cleanup(AimLooped) AimEnabled=false return end
 				if not AimEnabled then return end
+				local aimType=Values.AimType
 				local char=player.Character
 				if IsDied(char) then return end
-				local rootPart=GetRootPart(char)
-				if not rootPart then return end
+				local rp=GetRootPart(char)
+				if not rp then return end
 				if IsDied(AimInstance) then
-					AimInstance=GetNearest(Values.AimType,Values.AimRange)
+					AimInstance=GetNearest(aimType,Values.AimRange)
 				end
 				if AimInstance then
-					local otherRootPart=GetRootPart(AimInstance)
-					if not otherRootPart then return end
-					local distance=(otherRootPart.Position-rootPart.Position).Magnitude
+					local orp=GetRootPart(AimInstance)
+					if not orp then return end
+					local distance=(orp.Position-rp.Position).Magnitude
 					if distance>Values.AimRange then
 						AimInstance=nil
 						LocalCamera.CameraSubject=player.Character
 						LocalCamera.CameraType=Enum.CameraType.Custom
 						return
 					end
+					local otherHumanoid=GetHumanoid(AimInstance)
+					if aimType=="Zombie" then if not otherHumanoid or (IsAlive(char) and not string.find(string.lower(AimInstance.Parent.Name),"zombie")) or otherHumanoid.MoveDirection.Magnitude<=0 then AimInstance=nil return end end
+					if aimType=="Team" then local otherPlayer=GetPlayer(AimInstance) if not otherPlayer or otherPlayer.TeamColor==LocalPlayer.TeamColor then AimInstance=nil return end end
+					local isFront=CanSee(aimRaycastParams,orp,rp,90)
+					if not isFront then return end
 					local part=nil
 					if Values.AimTargetType=="Head" then
 						part=GetHeadPart(AimInstance)
@@ -4930,7 +4959,7 @@ function GiveFlashlightTool(enabled,player,s)
 		GetHumanoid(char):UnequipTools()
 		table.insert(FlashlightToolCache,tool)
 		local flashlightToolConnection=tool.Activated:Connect(function()
-			spotLight.Enabled = not spotLight.Enabled
+			spotLight.Enabled=not spotLight.Enabled
 			sound1:Play()
 		end)
 		table.insert(FlashlightToolCache,flashlightToolConnection)
@@ -4951,6 +4980,14 @@ function GiveFlashlightTool(enabled,player,s)
 	else
 		Notify("Flashlight Tool","Remove Flashlight Tool")
 	end
+end
+
+function ClearAllCache()
+	InfoEnabled,ThirdPersonEnabled,DiscoEnabled,MaxZoomEnabled,MinZoomEnabled,AimEnabled,ESPEnabled,ESPNPCEnabled,BoostAnimEnabled,IdleAnimEnabled,AntiFlingEnabled,WalkSpeedEnabled,HealthEnabled,JumpEnabled,InvisibleEnabled,SpinEnabled,FollowEnabled,NoclipEnabled,FlyEnabled,ViewEnabled,AutoJumpEnabled,NoAccessoryEnabled,HitboxEnabled,SuperHitboxEnabled,TeleportToolEnabled,ESPToolEnabled,FlashlightToolEnabled=false,LocalPlayer.CameraMode==Enum.CameraMode.Classic,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false
+	RemoveDance()
+	ClearCache({AFKIdled,AntiLagObjectAdded,SpinCharAdded,AntiFlingCharAdded,ViewCharAdded,AntiFlingAdded,FollowLooped,AutoJumpLooped,NoclipLooped,AimLooped,MaxZoomThread,MinZoomThread,DiscoThread,WalkSpeedThread,HealthThread,JumpThread,DanceAnimTrack,BoostAnimThread,SpinThread})
+	ClearCache({MainCache,InfoCache,FlyCache,TeleportToolCache,FlashlightToolCache,ESPToolCache}) 
+	TeleportToolCache={} FlashlightToolCache={} ESPToolCache={}
 end
 
 SafeNPC(function(npc)
@@ -5485,11 +5522,11 @@ AddCommand({"flingspeed","spinspeed"},function(s)
 	EnableSpin(2,LocalPlayer,s)
 end)
 
-AddCommand({"fling","spin"},"Spins anyone you touch",function(s)
+AddCommand({"fling","spin"},function(s)
 	EnableSpin(1,LocalPlayer,s)
 end)
 
-AddCommand({"unfling","unspin"},"Disables the spin command",function(s)
+AddCommand({"unfling","unspin"},function(s)
 	EnableSpin(0,LocalPlayer,s)
 end)
 
@@ -5804,13 +5841,14 @@ function RemovePlayer(userId)
 	if index then table.remove(PlayerList,index) end
 end
 
-SafePlayer(function(player:Player)
+SafePlayer(function(player)
 	if ESPEnabled then ESP(player) end
 	local index=#PlayerList+1
 	PlayerList[index]={["Index"]=index,["Value"]=player,["UserId"]=player.UserId,["Name"]=player.Name,["DisplayName"]=player.DisplayName,["Age"]=player.AccountAge}
 	AddPlayerFrame(player,index)
 end,function(player)
 	local userId=player.UserId
+	if userId==LocalPlayer.UserId then ClearAllCache() end
 	local viewUserId=IsAlive(ViewInstance) and ViewInstance.UserId or nil
 	local playerUserId=IsAlive(PlayerInstance) and PlayerInstance.UserId or nil
 	if playerUserId and playerUserId==userId then PlayerInstance=nil end
@@ -5824,9 +5862,10 @@ end,function(player)
 			NextSelectPlayer()
 		end
 	end
+	
 end)
 
-SelectPlayerFrame.PlayerBox:GetPropertyChangedSignal("Text"):Connect(function()
+MainCache.PlayerBoxTextChanged=SelectPlayerFrame.PlayerBox:GetPropertyChangedSignal("Text"):Connect(function()
 	local inputText=string.lower(SelectPlayerFrame.PlayerBox.Text)
 	local inputNumber=tonumber(inputText)
 	for k,v in pairs(PlayerList) do 
@@ -5845,7 +5884,7 @@ SelectPlayerFrame.PlayerBox:GetPropertyChangedSignal("Text"):Connect(function()
 	end
 end)
 
-SelectPlayerFrame.PlayerBox.FocusLost:Connect(function(enterPress)
+MainCache.PlayerBoxFocusLost=SelectPlayerFrame.PlayerBox.FocusLost:Connect(function(enterPress)
 	if not enterPress then return end
 	local inputText=SelectPlayerFrame.PlayerBox.Text
 	SetPlayerFrame(inputText)
@@ -5858,13 +5897,13 @@ SelectPlayerFrame.PlayerBox.FocusLost:Connect(function(enterPress)
 end)
 
 local ViewsFrame=SelectPlayerFrame.Views
-ViewsFrame.Button.MouseButton1Click:Connect(function()
+MainCache.ViewPressed=ViewsFrame.Button.MouseButton1Click:Connect(function()
 	ExecuteCommand(ViewEnabled and "unview" or `view {tostring(IsAlive(PlayerInstance) and PlayerInstance.UserId or "")}`)
 end)
-ViewsFrame.Next.MouseButton1Click:Connect(function()
+MainCache.ViewNextPressed=ViewsFrame.Next.MouseButton1Click:Connect(function()
 	NextSelectPlayer()
 end)
-ViewsFrame.Previous.MouseButton1Click:Connect(function()
+MainCache.ViewPreviousPressed=ViewsFrame.Previous.MouseButton1Click:Connect(function()
 	PreviousSelectPlayer()
 end)
 
@@ -6017,57 +6056,57 @@ else
 	end)
 end
 local EnablesOrDisablesFrame=PlayerFrame.EnablesOrDisables
-EnablesOrDisablesFrame.Chosen.MouseButton1Click:Connect(function()
+MainCache.EnableOrDisableChosenPressed=EnablesOrDisablesFrame.Chosen.MouseButton1Click:Connect(function()
 	CoreGuiTypeIndex,EnablesOrDisablesFrame.Chosen.Text=NextValue(CoreGuiTypesList,CoreGuiTypeIndex)
 end)
-EnablesOrDisablesFrame.On.MouseButton1Click:Connect(function()
+MainCache.EnableOrDisableOnPressed=EnablesOrDisablesFrame.On.MouseButton1Click:Connect(function()
 	ExecuteCommand(`enable {EnablesOrDisablesFrame.Chosen.Text}`)
 end)
-EnablesOrDisablesFrame.Off.MouseButton1Click:Connect(function()
+MainCache.EnableOrDisableOffPressed=EnablesOrDisablesFrame.Off.MouseButton1Click:Connect(function()
 	ExecuteCommand(`disable {EnablesOrDisablesFrame.Chosen.Text}`)
 end)
-PlayerFrame.DexButton.MouseButton1Click:Connect(function()
+MainCache.DexPressed=PlayerFrame.DexButton.MouseButton1Click:Connect(function()
 	ExecuteCommand("dex")
 end)
-PlayerFrame.GrabObjectButton.MouseButton1Click:Connect(function()
+MainCache.GrabObjectPressed=PlayerFrame.GrabObjectButton.MouseButton1Click:Connect(function()
 	ExecuteCommand("grabobject")
 end)
-PlayerFrame.ServerHopButton.MouseButton1Click:Connect(function()
+MainCache.ServerHopPressed=PlayerFrame.ServerHopButton.MouseButton1Click:Connect(function()
 	ExecuteCommand("serverhop")
 end)
-PlayerFrame.SpyButton.MouseButton1Click:Connect(function()
+MainCache.SpyPressed=PlayerFrame.SpyButton.MouseButton1Click:Connect(function()
 	ExecuteCommand("spy")
 end)
-PlayerFrame.RejoinButton.MouseButton1Click:Connect(function()
+MainCache.RejoinPressed=PlayerFrame.RejoinButton.MouseButton1Click:Connect(function()
 	ExecuteCommand("rejoin")
 end)
-PlayerFrame.AntiKickButton.MouseButton1Click:Connect(function()
+MainCache.AntiKickPressed=PlayerFrame.AntiKickButton.MouseButton1Click:Connect(function()
 	ExecuteCommand("antikick")
 end)
-PlayerFrame.AFKButton.MouseButton1Click:Connect(function()
+MainCache.AFKPressed=PlayerFrame.AFKButton.MouseButton1Click:Connect(function()
 	ExecuteCommand("antiidle")
 end)
-PlayerFrame.BoostFPSButton.MouseButton1Click:Connect(function()
+MainCache.BoostFPSPressed=PlayerFrame.BoostFPSButton.MouseButton1Click:Connect(function()
 	ExecuteCommand("boostfps")
 end)
 
 PlayerFrame.ThirdPersonToggle.Turns.BackgroundColor3=TurnColors[ThirdPersonEnabled]
-PlayerFrame.ThirdPersonToggle.MouseButton1Click:Connect(function()
+MainCache.ThirdPersonPressed=PlayerFrame.ThirdPersonToggle.MouseButton1Click:Connect(function()
 	ExecuteCommand("togglethirdperson")
 end)
 
 local UpdatesFrame=PlayerFrame.Updates
-UpdatesFrame.Chosen.MouseButton1Click:Connect(function()
+MainCache.UpdateChosenPressed=UpdatesFrame.Chosen.MouseButton1Click:Connect(function()
 	UpdateIndex,UpdatesFrame.Chosen.Text=NextValue(UpdateList,UpdateIndex)
 end)
-UpdatesFrame.Button.MouseButton1Click:Connect(function()
+MainCache.UpdatePressed=UpdatesFrame.Button.MouseButton1Click:Connect(function()
 	ExecuteCommand("update"..string.lower(UpdatesFrame.Chosen.Text))
 end)
 local FixesFrame=PlayerFrame.Fixes
-FixesFrame.Chosen.MouseButton1Click:Connect(function()
+MainCache.FixesChosenPressed=FixesFrame.Chosen.MouseButton1Click:Connect(function()
 	FixIndex,FixesFrame.Chosen.Text=NextValue(Fixes,FixIndex)
 end)
-FixesFrame.Button.MouseButton1Click:Connect(function()
+MainCache.FixesPressed=FixesFrame.Button.MouseButton1Click:Connect(function()
 	ExecuteCommand("fix"..string.lower(FixesFrame.Chosen.Text))
 end)
 
@@ -6078,7 +6117,7 @@ CharacterCommandList={
 	{CharacterFrame.BringButton,function() if not IsAlive(PlayerInstance) then NotifyWarn("Bring","No player selected") return nil end Notify("Bring",":)") return nil end,"Button"},
 	{CharacterFrame.GotoButton,function() if not IsAlive(PlayerInstance) then NotifyWarn("Goto","No player selected") return nil end return `goto {tostring(PlayerInstance.UserId)}` end,"Button"},
 	{CharacterFrame.WallHopButton,function() return "wallhop" end,"Button"},
-	{CharacterFrame.AimlockTypeChosen,function() local s=Values.AimType if s=="Player" then s="NPC" elseif s=="NPC" then s="All" else s="Player" end CharacterFrame.AimlockTypeChosen.Text="Type: "..s return `aimtype {s}` end,"Button"},
+	{CharacterFrame.AimlockTypeChosen,function() local s=Values.AimType if s=="Player" then s="Team" elseif s=="Team" then s="Zombie" elseif s=="Zombie" then s="NPC" else s="Player" end CharacterFrame.AimlockTypeChosen.Text="Type: "..s return `aimtype {s}` end,"Button"},
 	{CharacterFrame.AimlockTargetChosen,function() local s=Values.AimTargetType if s=="Head" then s="Root" else s="Head" end CharacterFrame.AimlockTargetChosen.Text="Target: "..s return `aimtarget {s}` end,"Button"},
 	{CharacterFrame.AimlockRangeBox,function(enterPress,text) return enterPress and `aimrange {text}` or nil end,"TextBox"},
 	{CharacterFrame.AimlockToggle,function() return AimEnabled and "unaim" or `aim {Values.AimType} {Values.AimTargetType} {Values.AimRange}` end,"Button"},
@@ -6106,11 +6145,11 @@ CharacterCommandList={
 
 for i,v in ipairs(CharacterCommandList) do 
 	if v[3]=="TextBox" then
-		v[1].FocusLost:Connect(function(enterPress)
+		MainCache[v[1].Name.."FocusLost"]=v[1].FocusLost:Connect(function(enterPress)
 			local s=v[2](enterPress,v[1].Text) if s then ExecuteCommand(s) v[1].Text="" end 
 		end)
 	else
-		v[1].MouseButton1Click:Connect(function() 
+		MainCache[v[1].Name.."Pressed"]=v[1].MouseButton1Click:Connect(function() 
 			local s=v[2]() if s then ExecuteCommand(s) end 
 		end) 
 	end
@@ -6121,7 +6160,7 @@ LightingCommandList={
 	{LightingFrame.DiscoToggle,function() return DiscoEnabled and "undisco" or "disco" end},
 	{LightingFrame.NoFogButton,function() return "nofog" end}
 }
-for i,v in ipairs(LightingCommandList) do v[1].MouseButton1Click:Connect(function() ExecuteCommand(v[2]()) end) end
+for i,v in ipairs(LightingCommandList) do MainCache[v[1].Name.."Pressed"]=v[1].MouseButton1Click:Connect(function() ExecuteCommand(v[2]()) end) end
 
 ToolCommandList={
 	{ToolFrame.InfoButton,function() return not InfoEnabled and "info" or "uninfo" end},
@@ -6132,7 +6171,7 @@ ToolCommandList={
 	{ToolFrame.F3xButton,function() return "f3x" end}
 }
 
-for i,v in ipairs(ToolCommandList) do v[1].MouseButton1Click:Connect(function() local s=v[2]() if s then ExecuteCommand(s) end end) end
+for i,v in ipairs(ToolCommandList) do MainCache[v[1].Name.."Pressed"]=v[1].MouseButton1Click:Connect(function() local s=v[2]() if s then ExecuteCommand(s) end end) end
 
 OpenButton.Visible=true
 Notify("Maswa","Maswa Loaded")
