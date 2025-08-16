@@ -96,7 +96,7 @@ local Saved={
 		["FogEnd"]=Lighting.FogEnd,
 	},
 	["UI"]={},
-	["Values"]={["MaxZoom"]=40,["MinZoom"]=0.5,["WalkSpeed"]=16,["Health"]=100,["Jump"]=50,["FlySpeed"]=100,["VehicleFlySpeed"]=50,["SpinSpeed"]=9999,["AnimSpeed"]=2,["HitboxSize"]=1,["AimType"]="Player",["AimTargetType"]="Head",["AimRange"]=15},
+	["Values"]={["MaxZoom"]=40,["MinZoom"]=0.5,["WalkSpeed"]=16,["Health"]=100,["Jump"]=50,["FlySpeed"]=50,["VehicleFlySpeed"]=50,["SpinSpeed"]=9999,["AnimSpeed"]=2,["HitboxSize"]=1,["AimType"]="Player",["AimTargetType"]="Head",["AimRange"]=25},
 	["Collisions"]={}
 }
 
@@ -135,7 +135,7 @@ local TurnVisible;
 local DanceInstance,SpinInstance,AimInstance,ViewInstance;
 local InfoEnabled,ThirdPersonEnabled,DiscoEnabled,MaxZoomEnabled,MinZoomEnabled,AimEnabled,ESPEnabled,ESPNPCEnabled,BoostAnimEnabled,IdleAnimEnabled,AntiFlingEnabled,WalkSpeedEnabled,HealthEnabled,JumpEnabled,InvisibleEnabled,SpinEnabled,FollowEnabled,NoclipEnabled,FlyEnabled,ViewEnabled,AutoJumpEnabled,NoAccessoryEnabled,HitboxEnabled,SuperHitboxEnabled,TeleportToolEnabled,ESPToolEnabled,FlashlightToolEnabled=false,LocalPlayer.CameraMode==Enum.CameraMode.Classic,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false
 local AFKIdled,AntiLagObjectAdded,SpinCharAdded,AntiFlingCharAdded,ViewCharAdded,AntiFlingAdded,FollowLooped,AutoJumpLooped,NoclipLooped,AimLooped,MaxZoomThread,MinZoomThread,DiscoThread,WalkSpeedThread,HealthThread,JumpThread,DanceAnimTrack,BoostAnimThread,SpinThread;
-local Values={["MaxZoom"]=40,["MinZoom"]=0.5,["WalkSpeed"]=16,["Health"]=100,["Jump"]=50,["FlySpeed"]=100,["SpinSpeed"]=9999,["AnimSpeed"]=2,["HitboxSize"]=1,["AimType"]="Player",["AimTargetType"]="Head",["AimRange"]=15}
+local Values={["MaxZoom"]=40,["MinZoom"]=0.5,["WalkSpeed"]=16,["Health"]=100,["Jump"]=50,["FlySpeed"]=50,["SpinSpeed"]=9999,["AnimSpeed"]=2,["HitboxSize"]=1,["AimType"]="Player",["AimTargetType"]="Head",["AimRange"]=25}
 
 for i,v in ipairs(Enum.CoreGuiType:GetEnumItems()) do CoreGuiTypes[string.lower(v.Name)]=v end
 
@@ -3970,28 +3970,32 @@ function EnableInvisible(enabled,player)
 end
 
 function RemoveESP(userId)
-	Cleanup(ESPCache[userId]) ESPCache[userId]=nil
+	local espFolder=ESPCache[userId] if espFolder then ESPCache[userId]=Cleanup(espFolder) end
 end
 
 function ESP(player)
 	task.spawn(function()
 		if player.UserId==LocalPlayer.UserId then return end
 		if not (ESPEnabled and IsAlive(player)) then return end
-		local espTeamColor=player.TeamColor==LocalPlayer.TeamColor and "Bright green" or "Bright red"
-		local userId=player.UserId
-		local playerName=player.DisplayName
+		local userId,userName,teamColor,studs,hp,highlights=player.UserId,player.DisplayName,player.TeamColor==LocalPlayer.TeamColor and "Bright green" or "Bright red",0,100,{}
 		if ESPCache[userId] then return end
+		
 		local espFolder=Instance.new("Folder")
 		espFolder.Name=player.Name.."_ESP"
 		espFolder.Parent=CoreGui
+		
 		ESPCache[userId]=espFolder
-		repeat task.wait(1) until not (ESPEnabled and IsAlive(player)) or GetCharacter(player.Character)~=nil
-		if not (ESPEnabled and IsAlive(player)) then return end
-		local char=player.Character
-		if IsAlive(char) then
-			task.spawn(function()
+		
+		local thread,teamChanged,looped=nil,nil,nil
+		
+		local function ESPNameTag()
+			repeat task.wait(1) until not (ESPEnabled and IsAlive(player) and ESPCache[userId]) or (not IsDied(player.Character) and GetHeadPart(player.Character)~=nil)
+			if not (ESPEnabled and IsAlive(player) and ESPCache[userId]) then thread=Cleanup(thread) RemoveESP(userId) return end
+			local char=player.Character
+			local head=GetHeadPart(char)
+			if head then
 				for i,v in ipairs(char:GetChildren()) do
-					if ESPEnabled and IsAlive(v) and v:IsA("BasePart") then
+					if IsAlive(v) and v:IsA("BasePart") then
 						local a=Instance.new("BoxHandleAdornment")
 						a.Name=Strs.RandomString()
 						a.Parent=espFolder
@@ -4000,86 +4004,64 @@ function ESP(player)
 						a.ZIndex=10
 						a.Size=v.Size
 						a.Transparency=0.75
-						a["Color"]=BrickColor.new(espTeamColor)
+						a["Color"]=BrickColor.new(teamColor)
+						table.insert(highlights,a)
 					end
 				end
-			end)
-			local espTeamChangedConnection=nil
-			local espCharAddedConnection=nil
-			local espLoopConnection=nil
-			local espDeadConnection=nil
-			local espHumanoidConnection=nil
-			local function ClearESPCache()
-				if espDeadConnection then espDeadConnection:Disconnect() espDeadConnection=nil end
-				if espTeamChangedConnection then espTeamChangedConnection:Disconnect() espTeamChangedConnection=nil end
-				if espHumanoidConnection then espHumanoidConnection:Disconnect() espHumanoidConnection=nil end
-				if espLoopConnection then espLoopConnection:Disconnect() espLoopConnection=nil end
-				if espCharAddedConnection then espCharAddedConnection:Disconnect() espCharAddedConnection=nil end
-				if ESPCache[userId] then ESPCache[userId]:Destroy() ESPCache[userId]=nil end
-				userId=nil;playerName=nil
-				ESP(player)		
-			end
-			espTeamChangedConnection=player:GetPropertyChangedSignal("TeamColor"):Connect(function()
-				if espTeamChangedConnection then espTeamChangedConnection:Disconnect() espTeamChangedConnection=nil end
-				ClearESPCache()
-			end)
-			local function ESPNameTagLoop()
-				repeat task.wait(1) until not (ESPEnabled and IsAlive(player) and IsAlive(espFolder)) or char:FindFirstChild("Head")
-				if not (ESPEnabled and IsAlive(player) and IsAlive(espFolder)) then ClearESPCache() return end
-				local head=char:FindFirstChild("Head")
-				if IsAlive(head) then
-					local studs=0
-					local hp=100
-					local billboardGui=Instance.new("BillboardGui")
-					local textLabel=Instance.new("TextLabel")
-					billboardGui.Adornee=head
-					billboardGui.Name=char.Name
-					billboardGui.Parent=espFolder
-					billboardGui.Size=UDim2.new(0,100,0,150)
-					billboardGui.StudsOffset=Vector3.new(0,1,0)
-					billboardGui.AlwaysOnTop=true
-					textLabel.Parent=billboardGui
-					textLabel.BackgroundTransparency=1
-					textLabel.Position=UDim2.new(0,0,0,-50)
-					textLabel.Size=UDim2.new(0,100,0,100)
-					textLabel.Font=Enum.Font.SourceSansSemibold
-					textLabel.TextSize=20
-					textLabel.TextColor3=Color3.new(1,1,1)
-					textLabel.TextStrokeTransparency=0
-					textLabel.TextYAlignment=Enum.TextYAlignment.Bottom
-					textLabel.Text="Name: "..tostring(playerName)
-					textLabel.ZIndex=10
-					espCharAddedConnection=player.CharacterAdded:Connect(function()
-						if espCharAddedConnection then espCharAddedConnection:Disconnect() espCharAddedConnection=nil end
-						ClearESPCache()
-					end)
-					local function EspLoop()
-						if ESPEnabled and IsAlive(player) and IsAlive(espFolder) then
-							local loopChar=player.Character
-							local localLoopChar=LocalPlayer.Character
-							local otherRootPart=GetRootPart(loopChar)
-							local myRootPart=GetRootPart(localLoopChar)
-							if otherRootPart and myRootPart then
-								local distance=otherRootPart.Position-myRootPart.Position
-								studs=math.floor(distance.Magnitude)
-							end
-							GetHumanoid(loopChar,function(v) hp=Round(v.Health,1) end)
-							textLabel.Text=`Name: {playerName} | Health: {hp} | Studs: {studs}`
-						else
-							if espLoopConnection then espLoopConnection:Disconnect() espLoopConnection=nil end
-							ClearESPCache()
+				if not (ESPEnabled and IsAlive(player) and ESPCache[userId]) then thread=Cleanup(thread) ClearCache(highlights) highlights={} RemoveESP(userId) return end
+				if IsDied(char) then thread=Cleanup(thread) ClearCache(highlights) highlights={} RemoveESP(userId) ESP(player) return end
+				local billboardGui=Instance.new("BillboardGui")
+				billboardGui.Adornee=head
+				billboardGui.Size=UDim2.new(0,100,0,150)
+				billboardGui.StudsOffset=Vector3.new(0,1,0)
+				billboardGui.AlwaysOnTop=true
+				billboardGui.Name=char.Name
+				billboardGui.Parent=espFolder
+				local textLabel=Instance.new("TextLabel")
+				textLabel.BackgroundTransparency=1
+				textLabel.Position=UDim2.new(0,0,0,-50)
+				textLabel.Size=UDim2.new(0,100,0,100)
+				textLabel.Font=Enum.Font.SourceSansSemibold
+				textLabel.TextSize=20
+				textLabel.TextColor3=Color3.new(1,1,1)
+				textLabel.TextStrokeTransparency=0
+				textLabel.TextYAlignment=Enum.TextYAlignment.Bottom
+				textLabel.Text="Name: "..userName
+				textLabel.ZIndex=10
+				textLabel.Parent=billboardGui
+				teamChanged=player:GetPropertyChangedSignal("TeamColor"):Connect(function()
+					teamChanged,looped,thread,billboardGui=ClearCache({teamChanged,looped,thread,billboardGui})
+					ClearCache(highlights) highlights={}
+					RemoveESP(userId)
+					ESP(player)
+				end)
+				local function EspLoop()
+					if ESPEnabled and ESPCache[userId] and IsAlive(player) and not IsDied(player.Character) then
+						local loopChar=player.Character
+						local localLoopChar=LocalPlayer.Character
+						local otherRootPart=GetRootPart(loopChar)
+						local myRootPart=GetRootPart(localLoopChar)
+						if otherRootPart and myRootPart then
+							local distance=otherRootPart.Position-myRootPart.Position
+							studs=math.floor(distance.Magnitude)
 						end
+						GetHumanoid(loopChar,function(v) hp=Round(v.Health,1) end)
+						if IsAlive(player) then userName=player.DisplayName end
+						textLabel.Text=`Name: {userName} | Health: {hp} | Studs: {studs}`
+					else
+						looped,teamChanged,thread,billboardGui=ClearCache({looped,teamChanged,thread,billboardGui})
+						ClearCache(highlights) highlights={}
+						RemoveESP(userId)
+						ESP(player)
 					end
-					espLoopConnection=RunService.RenderStepped:Connect(EspLoop)
-				else
-					ESPNameTagLoop()
 				end
+				looped=RunService.RenderStepped:Connect(EspLoop)
+			else
+				ESPNameTag()
 			end
-			task.spawn(ESPNameTagLoop)
-		else
-			if ESPCache[userId] then ESPCache[userId]:Destroy() ESPCache[userId]=nil end
-			ESP(player)
 		end
+		thread=coroutine.create(ESPNameTag)
+		coroutine.resume(thread)
 	end)
 end
 
@@ -4096,47 +4078,46 @@ function EnableESP(enabled)
 end
 
 function RemoveESPNPC(value)
-	local espNPCFolder=ESPNPCCache[value] if espNPCFolder then ESPNPCCache[value]=nil end
+	local espNPCFolder=ESPNPCCache[value] if espNPCFolder then ESPNPCCache[value]=Cleanup(espNPCFolder) end
 end
 
 function ESPNPC(npc)
 	task.spawn(function()
 		if not ESPNPCEnabled or IsDied(npc) then return end
 		if ESPNPCCache[npc] then return end
-		ESPNPCCache[npc]=true
-		local npcName,npcHighlights=npc.Name,{}
+		local npcName,hp,studs,npcLooped,npcThread,npcHighlights=npc.Name,0,0,nil,nil,{}
 		local espNPCFolder=Instance.new("Folder")
 		espNPCFolder.Name=npcName.."_ESP_NPC"
 		espNPCFolder.Parent=CoreGui
-		for i,v in ipairs(npc:GetChildren()) do
-			if ESPNPCEnabled and ESPNPCCache[npc] and IsAlive(v) and v:IsA("BasePart") then
-				local a=Instance.new("BoxHandleAdornment")
-				a.Name=Strs.RandomString()
-				a.Parent=espNPCFolder
-				a.Adornee=v
-				a.AlwaysOnTop=true
-				a.ZIndex=10
-				a.Size=v.Size
-				a.Transparency=0.75
-				a["Color"]=BrickColor.new("Brown")
-				table.insert(npcHighlights,a)
-			end
-		end
-		local hp,studs,billboardGui,textLabel,npcLooped=0,0,nil,nil,nil
+		ESPNPCCache[npc]=espNPCFolder
 		local function NPCNameTag()
 			repeat task.wait(1) until not (ESPNPCEnabled and ESPNPCCache[npc]) or IsDied(npc) or GetHeadPart(npc)~=nil
 			if not (ESPNPCEnabled and ESPNPCCache[npc]) or IsDied(npc) then return end
 			local head=GetHeadPart(npc)
-			if IsAlive(head) then
-				billboardGui=Instance.new("BillboardGui")
-				billboardGui=Instance.new("TextLabel")
+			if head then
+				for i,v in ipairs(npc:GetChildren()) do
+					if IsAlive(v) and v:IsA("BasePart") then
+						local a=Instance.new("BoxHandleAdornment")
+						a.Name=Strs.RandomString()
+						a.Parent=espNPCFolder
+						a.Adornee=v
+						a.AlwaysOnTop=true
+						a.ZIndex=10
+						a.Size=v.Size
+						a.Transparency=0.75
+						a["Color"]=BrickColor.new("Brown")
+						table.insert(npcHighlights,a)
+					end
+				end
+				if not (ESPNPCEnabled and ESPNPCCache[npc]) or IsDied(npc) then ClearCache(npcHighlights) npcHighlights={} npcThread=Cleanup(npcThread) return end
+				local billboardGui=Instance.new("BillboardGui")
 				billboardGui.Adornee=head
-				billboardGui.Name=npcName
-				billboardGui.Parent=espNPCFolder
 				billboardGui.Size=UDim2.new(0,100,0,150)
 				billboardGui.StudsOffset=Vector3.new(0,1,0)
 				billboardGui.AlwaysOnTop=true
-				textLabel.Parent=billboardGui
+				billboardGui.Name=npcName
+				billboardGui.Parent=espNPCFolder
+				local textLabel=Instance.new("TextLabel")
 				textLabel.BackgroundTransparency=1
 				textLabel.Position=UDim2.new(0,0,0,-50)
 				textLabel.Size=UDim2.new(0,100,0,100)
@@ -4147,27 +4128,28 @@ function ESPNPC(npc)
 				textLabel.TextYAlignment=Enum.TextYAlignment.Bottom
 				textLabel.Text="Name: "..tostring(npcName)
 				textLabel.ZIndex=10
+				textLabel.Parent=billboardGui
+				local function NPCLoop()
+					if ESPNPCEnabled and ESPNPCCache[npc] and not IsDied(npc) then
+						local otherRootPart=GetRootPart(npc)
+						local rootPart=GetRootPart(LocalPlayer.Character)
+						if otherRootPart and rootPart then
+							local distance=otherRootPart.Position-rootPart.Position
+							studs=math.floor(distance.Magnitude)
+						end
+						GetHumanoid(npc,function(v) hp=Round(v.Health,1) end)
+						textLabel.Text=`Name: {npcName} | Health: {hp} | Studs: {studs}`
+					else
+						npcLooped=Cleanup(npcLooped) ClearCache(npcHighlights) npcHighlights={} npcThread=Cleanup(npcThread) billboardGui=Cleanup(billboardGui) RemoveESPNPC(npc)
+					end
+				end
+				npcLooped=RunService.RenderStepped:Connect(NPCLoop)
 			else
 				NPCNameTag()
 			end
 		end
-		local npcThread=coroutine.create(NPCNameTag)
-		coroutine.resume(NPCNameTag)
-		local function NPCLoop()
-			if ESPNPCEnabled and ESPNPCCache[npc] and not IsDied(npc) then
-				local otherRootPart=GetRootPart(npc)
-				local rootPart=GetRootPart(LocalPlayer.Character)
-				if otherRootPart and rootPart then
-					local distance=otherRootPart.Position-rootPart.Position
-					studs=math.floor(distance.Magnitude)
-				end
-				GetHumanoid(npc,function(v) hp=Round(v.Health,1) end)
-				if textLabel then textLabel.Text=`Name: {npcName} | Health: {hp} | Studs: {studs}` end
-			else
-				npcLooped=Cleanup(npcLooped) ClearCache(npcHighlights) npcHighlights={} npcThread=Cleanup(npcThread) textLabel=nil billboardGui=Cleanup(billboardGui) RemoveESPNPC(npc)
-			end
-		end
-		npcLooped=RunService.RenderStepped:Connect(NPCLoop)
+		npcThread=coroutine.create(NPCNameTag)
+		coroutine.resume(npcThread)
 	end)
 end
 
@@ -4470,7 +4452,7 @@ function EnableBoostAnim(no,player,s)
 	if no==1 or no==0 then
 		BoostAnimEnabled=no==1
 		BoostAnimThread=Cleanup(BoostAnimThread)
-		if enabled then
+		if no==1 then
 			BoostAnimThread=coroutine.create(function()
 				while BoostAnimEnabled do
 					ApplyAnimationSpeed(player.Character,Values.AnimSpeed)
@@ -4539,6 +4521,7 @@ function CanSee(rayParams,originPart,targetPart,maxAngle)
 end
 
 function GetNearest(mode,range)
+	range=range or 25
 	local userId=LocalPlayer.UserId
 	local value,lastDistance,fovThreshold=nil,math.huge,1
 	local characters={}
@@ -4551,30 +4534,29 @@ function GetNearest(mode,range)
 		end
 	elseif mode=="Zombie" or mode=="NPC" then
 		characters=NPCList
-	elseif mode=="All" then
-		for i,v in ipairs(PlayerList) do
-			local player=v.Value
-			if IsAlive(player) and player.UserId~=userId then
-				table.insert(characters,player.Character)
-			end
-		end
-		for i,char in ipairs(NPCList) do
-			table.insert(characters,char)
-		end
 	else
 		return value,lastDistance
 	end
 	aimRaycastParams.FilterDescendantsInstances=characters
 	for i,char in ipairs(characters) do
 		if IsDied(char) then continue end
-		local rp,orp,humanoid=GetRootPart(LocalPlayer.Character),GetRootPart(char),GetHumanoid(char) :: Humanoid
+		local rp,orp,humanoid=GetRootPart(LocalPlayer.Character),GetRootPart(char),GetHumanoid(char)
 		if not (rp and orp) then continue end
 		local distance=math.floor((orp.Position-rp.Position).Magnitude)
 		if distance<=range and distance<lastDistance then
-			local isFront=CanSee(aimRaycastParams,orp,rp,90)
-			if isFront then
-				if mode=="Zombie" then if not humanoid or (IsAlive(char) and not string.find(string.lower(char.Parent.Name),"zombie")) or humanoid.MoveDirection.Magnitude<=0 then continue end end
-				if mode=="Team" then local player=GetPlayer(char) if not player or player.TeamColor==LocalPlayer.TeamColor then continue end end
+			if mode=="Zombie" then if not humanoid or humanoid.MoveDirection.Magnitude<=0 then continue end end
+			if mode=="Team" or mode=="Player" then 
+				local player=GetPlayer(char)
+				if not player then continue end
+				if mode=="Team" and player.TeamColor==LocalPlayer.TeamColor then continue end 
+			end
+			if mode=="NPC" then
+				local isFront=CanSee(aimRaycastParams,orp,rp,90,1)
+				if isFront then
+					value=char
+					lastDistance=distance
+				end
+			else
 				value=char
 				lastDistance=distance
 			end
@@ -4597,14 +4579,9 @@ function EnableAim(no,player,s1,s2,s3)
 					NotifyWarn("Aimlock","NPCs is empty")
 					return
 				end
-			elseif Values.AimType=="Player" then
+			elseif Values.AimType=="Player" or Values.AimType=="Team" then
 				if (#PlayerList-1)<=0 then
 					NotifyWarn("Aimlock","Players is empty")
-					return
-				end
-			elseif Values.AimType=="All" then
-				if #NPCList<=0 and (#PlayerList-1)<=0 then
-					NotifyWarn("Aimlock","Players and NPCs is empty")
 					return
 				end
 			else
@@ -4637,9 +4614,15 @@ function EnableAim(no,player,s1,s2,s3)
 					end
 					local otherHumanoid=GetHumanoid(AimInstance)
 					if aimType=="Zombie" then if not otherHumanoid or (IsAlive(char) and not string.find(string.lower(AimInstance.Parent.Name),"zombie")) or otherHumanoid.MoveDirection.Magnitude<=0 then AimInstance=nil return end end
-					if aimType=="Team" then local otherPlayer=GetPlayer(AimInstance) if not otherPlayer or otherPlayer.TeamColor==LocalPlayer.TeamColor then AimInstance=nil return end end
-					local isFront=CanSee(aimRaycastParams,orp,rp,90)
-					if not isFront then return end
+					if aimType=="Team" or aimType=="Player" then
+						local otherPlayer=GetPlayer(AimInstance)
+						if not otherPlayer then AimInstance=nil return end
+						if aimType=="Team" and otherPlayer.TeamColor==LocalPlayer.TeamColor then AimInstance=nil return end
+					end
+					if aimType=="NPC" then
+						local isFront=CanSee(aimRaycastParams,orp,rp,90)
+						if not isFront then return end
+					end
 					local part=nil
 					if Values.AimTargetType=="Head" then
 						part=GetHeadPart(AimInstance)
