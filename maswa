@@ -71,7 +71,15 @@ local InputPriority=Enum.ContextActionPriority.High.Value
 
 local Prefix="/"
 
-local Saved={
+local Environment={}
+Environment.Settings={
+	TeamCheck=false,
+	AliveCheck=false,
+	WallCheck=false
+
+}
+Environment.Values={["MaxZoom"]=40,["MinZoom"]=0.5,["WalkSpeed"]=16,["Health"]=100,["Jump"]=50,["FlySpeed"]=50,["SpinSpeed"]=9999,["AnimSpeed"]=2,["HitboxSize"]=1,["AimType"]="Player",["AimLock"]="Head",["AimRange"]=25}
+Environment.Saved={
 	["Player"]={
 		["CameraMaxZoomDistance"]=LocalPlayer.CameraMaxZoomDistance,
 		["CameraMinZoomDistance"]=LocalPlayer.CameraMinZoomDistance,
@@ -96,7 +104,7 @@ local Saved={
 		["FogEnd"]=Lighting.FogEnd,
 	},
 	["UI"]={},
-	["Values"]={["MaxZoom"]=40,["MinZoom"]=0.5,["WalkSpeed"]=16,["Health"]=100,["Jump"]=50,["FlySpeed"]=50,["VehicleFlySpeed"]=50,["SpinSpeed"]=9999,["AnimSpeed"]=2,["HitboxSize"]=1,["AimType"]="Player",["AimTargetType"]="Head",["AimRange"]=25},
+	["Values"]={["MaxZoom"]=40,["MinZoom"]=0.5,["WalkSpeed"]=16,["Health"]=100,["Jump"]=50,["FlySpeed"]=50,["VehicleFlySpeed"]=50,["SpinSpeed"]=9999,["AnimSpeed"]=2,["HitboxSize"]=1,["AimType"]="Player",["AimLock"]="Head",["AimRange"]=25},
 	["Collisions"]={}
 }
 
@@ -135,7 +143,7 @@ local TurnVisible;
 local DanceInstance,SpinInstance,AimLocked,ViewInstance;
 local InfoEnabled,ThirdPersonEnabled,DiscoEnabled,MaxZoomEnabled,MinZoomEnabled,AimEnabled,ESPEnabled,ESPNPCEnabled,BoostAnimEnabled,IdleAnimEnabled,AntiFlingEnabled,WalkSpeedEnabled,HealthEnabled,JumpEnabled,InvisibleEnabled,SpinEnabled,FollowEnabled,NoclipEnabled,FlyEnabled,ViewEnabled,AutoJumpEnabled,NoAccessoryEnabled,HitboxEnabled,SuperHitboxEnabled,TeleportToolEnabled,ESPToolEnabled,FlashlightToolEnabled=false,LocalPlayer.CameraMode==Enum.CameraMode.Classic,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false
 local AFKIdled,AntiLagObjectAdded,SpinCharAdded,AntiFlingCharAdded,ViewCharAdded,AntiFlingAdded,FollowLooped,AutoJumpLooped,NoclipLooped,AimLooped,MaxZoomThread,MinZoomThread,DiscoThread,WalkSpeedThread,HealthThread,JumpThread,DanceAnimTrack,BoostAnimThread,SpinThread;
-local Values={["MaxZoom"]=40,["MinZoom"]=0.5,["WalkSpeed"]=16,["Health"]=100,["Jump"]=50,["FlySpeed"]=50,["SpinSpeed"]=9999,["AnimSpeed"]=2,["HitboxSize"]=1,["AimType"]="Player",["AimTargetType"]="Head",["AimRange"]=25}
+
 
 for i,v in ipairs(Enum.CoreGuiType:GetEnumItems()) do CoreGuiTypes[string.lower(v.Name)]=v end
 
@@ -385,7 +393,7 @@ function SafeNPC(added,removed)
 			if IsNPC(v) then 
 				if not IsDied(v) then 
 					added(v) 
-					
+
 				else 
 					removed(v) 
 				end 
@@ -3484,36 +3492,36 @@ end
 
 function SetSaved(mode)
 	if mode=="Player" or mode=="All" then
-		for k,v in pairs(Saved.Player) do pcall(function() LocalPlayer[k]=v end) end
+		for k,v in pairs(Environment.Saved.Player) do pcall(function() LocalPlayer[k]=v end) end
 	end
 	if mode=="Humanoid" or mode=="All" then
-		GetHumanoid(LocalPlayer.Character,function(humanoid) for k,v in pairs(Saved.Humanoid) do pcall(function() humanoid[k]=v end) end end)
+		GetHumanoid(LocalPlayer.Character,function(humanoid) for k,v in pairs(Environment.Saved.Humanoid) do pcall(function() humanoid[k]=v end) end end)
 	end
 	if mode=="Lighting" or mode=="All" then
-		for k,v in pairs(Saved.Lighting) do pcall(function() Lighting[k]=v end) end
+		for k,v in pairs(Environment.Saved.Lighting) do pcall(function() Lighting[k]=v end) end
 	end
 	if mode=="UI" or mode=="All" then
-		for v,k in pairs(Saved.UI) do if IsAlive(v) then v.Enabled=k.Enabled end end
+		for v,k in pairs(Environment.Saved.UI) do if IsAlive(v) then v.Enabled=k.Enabled end end
 	end
 	if mode=="Other" or mode=="All" then
-		for k,v in pairs(Saved.Values) do pcall(function() Values[k]=v end) end
+		for k,v in pairs(Environment.Saved.Values) do pcall(function() Environment.Values[k]=v end) end
 	end
 end
 function UpdateSaved(mode)
 	if mode=="Player" or mode=="All" then
-		for k,v in pairs(Saved.Player) do pcall(function() Saved.Player[k]=LocalPlayer[k] end) end
+		for k,v in pairs(Environment.Saved.Player) do pcall(function() Environment.Saved.Player[k]=LocalPlayer[k] end) end
 	end
 	if mode=="Humanoid" or mode=="All" then
-		GetHumanoid(LocalPlayer.Character,function(humanoid) for k,v in pairs(Saved.Humanoid) do pcall(function() Saved.Humanoid[k]=humanoid[k] end) end end)
+		GetHumanoid(LocalPlayer.Character,function(humanoid) for k,v in pairs(Environment.Saved.Humanoid) do pcall(function() Environment.Saved.Humanoid[k]=humanoid[k] end) end end)
 	end
 	if mode=="Lighting" or mode=="All" then
-		for k,v in pairs(Saved.Lighting) do pcall(function() Saved.Lighting[k]=Lighting[k] end) end
+		for k,v in pairs(Environment.Saved.Lighting) do pcall(function() Environment.Saved.Lighting[k]=Lighting[k] end) end
 	end
 	if mode=="UI" or mode=="All" then
-		Saved.UI={} for i,v in ipairs(PlayerGui:GetChildren()) do if IsAlive(v) and v.ClassName=="ScreenGui" then if not Saved.UI[v] then Saved.UI[v]={["Enabled"]=v.Enabled} end end end
+		Environment.Saved.UI={} for i,v in ipairs(PlayerGui:GetChildren()) do if IsAlive(v) and v.ClassName=="ScreenGui" then if not Environment.Saved.UI[v] then Environment.Saved.UI[v]={["Enabled"]=v.Enabled} end end end
 	end
 	if mode=="Other" or mode=="All" then
-		for k,v in pairs(Saved.Values) do pcall(function() Saved.Values[k]=Values[k] end) end
+		for k,v in pairs(Environment.Saved.Values) do pcall(function() Environment.Saved.Values[k]=Environment.Values[k] end) end
 	end
 end
 
@@ -3644,7 +3652,6 @@ function Notify(title,description,duration,color)
 	end)
 end
 
-
 function GetSelectInfoOrLocalPlayer()
 	if next(SelectInfo) then return SelectInfo else if IsAlive(LocalPlayer) then  return LocalPlayer end end return {["Name"]="Loading",["UserId"]=-1,["CharacterAppearanceId"]=-1}
 end
@@ -3674,8 +3681,8 @@ function OpenInfo(enabled)
 		InfoCache.AppearancePressed=InfoScroller.Appearances.Copy.MouseButton1Click:Connect(function()
 			if appearanceId then toClipboard(tostring(appearanceId)) end
 		end)
-		InfoCache.LoopThread=Cleanup(InfoCache.AppearancePressed)
-		InfoCache.LoopThread=coroutine.create(function()
+		InfoCache.Thread=Cleanup(InfoCache.AppearancePressed)
+		InfoCache.Thread=coroutine.create(function()
 			while InfoEnabled do
 				local Asset=GetProductInfo(PlaceId)
 				if Asset then placeName=Asset.Name else if workspace.Parent then placeName=workspace.Parent.Name end end
@@ -3704,7 +3711,7 @@ function OpenInfo(enabled)
 				task.wait(1)
 			end
 		end)
-		coroutine.resume(InfoCache.LoopThread)
+		coroutine.resume(InfoCache.Thread)
 		task.delay(0.25,function()
 			MenuFrame.Visible=true
 			OpenButton.Visible=MenuFrame.Visible~=true
@@ -3721,12 +3728,6 @@ function OpenInfo(enabled)
 	ToolFrame.InfoButton.Text=(enabled and "Close" or "Open").." Info"
 	Notify("Info",enabled and "Open information" or "Close information")
 end
-
-MainCache.BackPressed=BackButton.MouseButton1Click:Connect(function()
-	OpenInfo(false)
-	ButtonScroller.Visible=true
-	BackButton.Visible=false
-end)
 
 function NotifyWarn(title:string,description:string,duration:number)
 	Notify(title,description,duration,Color3.fromRGB(255,170,0))
@@ -3854,18 +3855,17 @@ function FixCamera(message)
 end
 
 function EnableMaxZoom(no,player,s)
-	Values.MaxZoom=Strs.GetNumber(s,Saved.Player.CameraMaxZoomDistance) or Values.MaxZoom
-	player.CameraMaxZoomDistance=Values.MaxZoom
+	Environment.Values.MaxZoom=Strs.GetNumber(s,Environment.Saved.Player.CameraMaxZoomDistance) or Environment.Values.MaxZoom
+	Environment.player.CameraMaxZoomDistance=Environment.Values.MaxZoom
 	if no==1 or no==0 then
 		MaxZoomEnabled=no==1
 		MaxZoomThread=Cleanup(MaxZoomThread)
 		if no==1 then
 			MaxZoomThread=coroutine.create(function()
-				while MaxZoomEnabled and IsAlive(player) do
-					player.CameraMaxZoomDistance=Values.MaxZoom
+				while MaxZoomEnabled do
+					player.CameraMaxZoomDistance=Environment.Values.MaxZoom
 					task.wait()
 				end
-				EnableMaxZoom(0,player,s)
 			end)
 			coroutine.resume(MaxZoomThread)
 		end
@@ -3874,15 +3874,15 @@ function EnableMaxZoom(no,player,s)
 end
 
 function EnableMinZoom(no,player,s)
-	Values.MinZoom=Strs.GetNumber(s,Saved.Player.CameraMinZoomDistance) or Values.MinZoom
-	player.CameraMinZoomDistance=Values.MinZoom
+	Environment.Values.MinZoom=Strs.GetNumber(s,Environment.Saved.Player.CameraMinZoomDistance) or Environment.Values.MinZoom
+	player.CameraMinZoomDistance=Environment.Values.MinZoom
 	if no==1 or no==0 then
 		MinZoomEnabled=no==1
 		MinZoomThread=Cleanup(MinZoomThread)
 		if no==1 then
 			MinZoomThread=coroutine.create(function()
-				while MinZoomEnabled and IsAlive(player) do
-					player.CameraMinZoomDistance=Values.MinZoom
+				while MinZoomEnabled do
+					player.CameraMinZoomDistance=Environment.Values.MinZoom
 					task.wait()
 				end
 			end)
@@ -3990,24 +3990,23 @@ function EnableInvisible(enabled,player)
 	end
 end
 
-function RemoveESP(userId)
+function RemoveESPPlayer(userId)
 	local espFolder=ESPCache[userId] if espFolder then ESPCache[userId]=Cleanup(espFolder) end
 end
 
-function ESP(player)
+function ESPPlayer(player)
 	task.spawn(function()
-		if player.UserId==LocalPlayer.UserId then return end
-		if not (ESPEnabled and IsAlive(player)) then return end
+		if not (ESPEnabled and IsAlive(player)) or player.UserId==LocalPlayer.UserId then return end
 		local userId,userName,teamColor,studs,hp,highlights=player.UserId,player.DisplayName,player.TeamColor==LocalPlayer.TeamColor and "Bright green" or "Bright red",0,100,{}
 		if ESPCache[userId] then return end
-		local espFolder=Instance.new("Folder")
-		espFolder.Name=player.Name.."_ESP"
-		espFolder.Parent=CoreGui
-		ESPCache[userId]=espFolder
+		local folder=Instance.new("Folder")
+		folder.Name=player.Name.."_ESP"
+		folder.Parent=CoreGui
+		ESPCache[userId]=folder
 		local teamChanged,looped=nil,nil
-		local function ESPNameTag()
+		local function PlayerNameTag()
 			repeat task.wait(1) until not (ESPEnabled and IsAlive(player) and ESPCache[userId]) or (not IsDied(player.Character) and GetHeadPart(player.Character)~=nil)
-			if not (ESPEnabled and IsAlive(player) and ESPCache[userId]) or IsDied(player.Character) then RemoveESP(userId) ESP(player) return end
+			if not (ESPEnabled and IsAlive(player) and ESPCache[userId]) or IsDied(player.Character) then RemoveESPPlayer(userId) ESPPlayer(player) return end
 			local char=player.Character
 			local head=GetHeadPart(char)
 			if head then
@@ -4015,7 +4014,7 @@ function ESP(player)
 					if IsAlive(v) and v:IsA("BasePart") then
 						local a=Instance.new("BoxHandleAdornment")
 						a.Name=Strs.RandomString()
-						a.Parent=espFolder
+						a.Parent=folder
 						a.Adornee=v
 						a.AlwaysOnTop=true
 						a.ZIndex=10
@@ -4025,14 +4024,14 @@ function ESP(player)
 						table.insert(highlights,a)
 					end
 				end
-				if not (ESPEnabled and IsAlive(player) and ESPCache[userId]) or IsDied(char) then ClearCache(highlights) highlights={} RemoveESP(userId) ESP(player) return end
+				if not (ESPEnabled and IsAlive(player) and ESPCache[userId]) or IsDied(char) then ClearCache(highlights) highlights={} RemoveESPPlayer(userId) ESPPlayer(player) return end
 				local billboardGui=Instance.new("BillboardGui")
 				billboardGui.Adornee=head
 				billboardGui.Size=UDim2.new(0,100,0,150)
 				billboardGui.StudsOffset=Vector3.new(0,1,0)
 				billboardGui.AlwaysOnTop=true
 				billboardGui.Name=char.Name
-				billboardGui.Parent=espFolder
+				billboardGui.Parent=folder
 				local textLabel=Instance.new("TextLabel")
 				textLabel.BackgroundTransparency=1
 				textLabel.Position=UDim2.new(0,0,0,-50)
@@ -4050,10 +4049,10 @@ function ESP(player)
 					looped=Cleanup(looped)
 					billboardGui=Cleanup(billboardGui)
 					ClearCache(highlights) highlights={}
-					RemoveESP(userId)
-					ESP(player)
+					RemoveESPPlayer(userId)
+					ESPPlayer(player)
 				end)
-				local function EspLoop()
+				local function PlayerLoop()
 					if ESPEnabled and ESPCache[userId] and IsAlive(player) and not IsDied(player.Character) then
 						local loopChar=player.Character
 						local localLoopChar=LocalPlayer.Character
@@ -4071,26 +4070,25 @@ function ESP(player)
 						looped=Cleanup(looped)
 						billboardGui=Cleanup(billboardGui)
 						ClearCache(highlights) highlights={}
-						RemoveESP(userId)
-						ESP(player)
+						RemoveESPPlayer(userId)
+						ESPPlayer(player)
 					end
 				end
-				looped=RunService.RenderStepped:Connect(EspLoop)
+				looped=RunService.RenderStepped:Connect(PlayerLoop)
 			else
-				ESPNameTag()
+				PlayerNameTag()
 			end
 		end
-		task.spawn(ESPNameTag)
+		task.spawn(PlayerNameTag)
 	end)
 end
 
 function EnableESP(enabled)
+	ESPEnabled=enabled
 	if enabled then
-		if ESPEnabled then return end ESPEnabled=true
-		for i,player in ipairs(Players:GetPlayers()) do ESP(player) end
+		for i,player in ipairs(Players:GetPlayers()) do ESPPlayer(player) end
 	else
-		if not ESPEnabled then return end ESPEnabled=false
-		for userId,espFolder in pairs(ESPCache) do RemoveESP(userId) end
+		ClearCache(ESPCache) ESPCache={}
 	end
 	CharacterFrame.ESPPlayerToggle.Turns.BackgroundColor3=TurnColors[enabled]
 	Notify("ESP","ESP "..TurnTexts[enabled])
@@ -4105,10 +4103,10 @@ function ESPNPC(npc)
 		if not ESPNPCEnabled or IsDied(npc) then return end
 		if ESPNPCCache[npc] then return end
 		local name,hp,studs,looped,highlights=npc.Name,0,0,nil,{}
-		local espNPCFolder=Instance.new("Folder")
-		espNPCFolder.Name=name.."_ESP_NPC"
-		espNPCFolder.Parent=CoreGui
-		ESPNPCCache[npc]=espNPCFolder
+		local folder=Instance.new("Folder")
+		folder.Name=name.."_ESP_NPC"
+		folder.Parent=CoreGui
+		ESPNPCCache[npc]=folder
 		local function NPCNameTag()
 			repeat task.wait(1) until not (ESPNPCEnabled and ESPNPCCache[npc]) or IsDied(npc) or GetHeadPart(npc)~=nil
 			if not (ESPNPCEnabled and ESPNPCCache[npc]) or IsDied(npc) then RemoveESPNPC(npc) return end
@@ -4118,7 +4116,7 @@ function ESPNPC(npc)
 					if IsAlive(v) and v:IsA("BasePart") then
 						local a=Instance.new("BoxHandleAdornment")
 						a.Name=Strs.RandomString()
-						a.Parent=espNPCFolder
+						a.Parent=folder
 						a.Adornee=v
 						a.AlwaysOnTop=true
 						a.ZIndex=10
@@ -4135,7 +4133,7 @@ function ESPNPC(npc)
 				billboardGui.StudsOffset=Vector3.new(0,1,0)
 				billboardGui.AlwaysOnTop=true
 				billboardGui.Name=name
-				billboardGui.Parent=espNPCFolder
+				billboardGui.Parent=folder
 				local textLabel=Instance.new("TextLabel")
 				textLabel.BackgroundTransparency=1
 				textLabel.Position=UDim2.new(0,0,0,-50)
@@ -4207,8 +4205,8 @@ function EnableAntiFling(enabled)
 end
 
 function EnableWalkSpeed(no,player,s)
-	Values.WalkSpeed=Strs.GetNumber(s,Saved.Humanoid.WalkSpeed or 16) or Values.WalkSpeed
-	SetHumanoid(player.Character,{["WalkSpeed"]=Values.WalkSpeed})
+	Environment.Values.WalkSpeed=Strs.GetNumber(s,Environment.Saved.Humanoid.WalkSpeed or 16) or Environment.Values.WalkSpeed
+	SetHumanoid(player.Character,{["WalkSpeed"]=Environment.Values.WalkSpeed})
 	if no==1 or no==0 then
 		local enabled=no==1
 		Cleanup(WalkSpeedThread) WalkSpeedThread=nil
@@ -4216,7 +4214,7 @@ function EnableWalkSpeed(no,player,s)
 		if enabled then
 			WalkSpeedThread=coroutine.create(function()
 				while WalkSpeedEnabled do
-					SetHumanoid(player.Character,{["WalkSpeed"]=Values.WalkSpeed})
+					SetHumanoid(player.Character,{["WalkSpeed"]=Environment.Values.WalkSpeed})
 					task.wait()
 				end
 			end)
@@ -4227,8 +4225,8 @@ function EnableWalkSpeed(no,player,s)
 end
 
 function EnableHealth(no,player,s)
-	Values.Health=Strs.GetNumber(s,Saved.Humanoid.MaxHealth or 100) or Values.Health
-	SetHumanoid(player.Character,{["MaxHealth"]=Values.Health,["Health"]=Values.Health})
+	Environment.Values.Health=Strs.GetNumber(s,Environment.Saved.Humanoid.MaxHealth or 100) or Environment.Values.Health
+	SetHumanoid(player.Character,{["MaxHealth"]=Environment.Values.Health,["Health"]=Environment.Values.Health})
 	if no==1 or no==0 then
 		local enabled=no==1
 		Cleanup(HealthThread) HealthThread=nil
@@ -4236,7 +4234,7 @@ function EnableHealth(no,player,s)
 		if enabled then
 			HealthThread=coroutine.create(function()
 				while HealthEnabled do
-					SetHumanoid(player.Character,{["MaxHealth"]=Values.Health,["Health"]=Values.Health})
+					SetHumanoid(player.Character,{["MaxHealth"]=Environment.Values.Health,["Health"]=Environment.Values.Health})
 					task.wait()
 				end
 			end)
@@ -4247,19 +4245,19 @@ function EnableHealth(no,player,s)
 end
 
 function GetJump(useJumpPower,s)
-	if Strs.IsOriginal(s) then return useJumpPower and (Saved.Humanoid.JumpPower or 50) or (Saved.Humanoid.JumpHeight or 28.634) else return tonumber(s) end
+	if Strs.IsOriginal(s) then return useJumpPower and (Environment.Saved.Humanoid.JumpPower or 50) or (Environment.Saved.Humanoid.JumpHeight or 28.634) else return tonumber(s) end
 end
 
 function EnableJump(no,player,s)
 	local jumpName="JumpPower"
-	GetHumanoid(player.Character,function(humanoid) jumpName=humanoid.UseJumpPower and "JumpPower" or "JumpHeight" Values.Jump=GetJump(humanoid.UseJumpPower,s) or Values.Jump humanoid[jumpName]=Values.Jump end)
+	GetHumanoid(player.Character,function(humanoid) jumpName=humanoid.UseJumpPower and "JumpPower" or "JumpHeight" Environment.Values.Jump=GetJump(humanoid.UseJumpPower,s) or Environment.Values.Jump humanoid[jumpName]=Environment.Values.Jump end)
 	if no==1 or no==0 then
 		JumpThread=Cleanup(JumpThread)
 		JumpEnabled=no==1
 		if no==1 then
 			JumpThread=coroutine.create(function()
 				while JumpEnabled do
-					GetHumanoid(player.Character,function(humanoid) humanoid[humanoid.UseJumpPower and "JumpPower" or "JumpHeight"]=Values.Jump end)
+					GetHumanoid(player.Character,function(humanoid) humanoid[humanoid.UseJumpPower and "JumpPower" or "JumpHeight"]=Environment.Values.Jump end)
 					task.wait()
 				end
 			end)
@@ -4273,16 +4271,16 @@ function EnableNoclip(enabled,player)
 	NoclipEnabled=enabled
 	NoclipLooped=Cleanup(NoclipLooped)
 	if enabled then
-		Saved.Collisions={}
+		Environment.Saved.Collisions={}
 		NoclipLooped=RunService.Stepped:Connect(function()
 			local char=player.Character
 			if not IsAlive(char) then return end
-			for i,v in ipairs(char:GetDescendants()) do if IsAlive(v) and v:IsA("BasePart") then if Saved.Collisions[v]==nil  then Saved.Collisions[v]=v.CanCollide end v.CanCollide=false end end
+			for i,v in ipairs(char:GetDescendants()) do if IsAlive(v) and v:IsA("BasePart") then if Environment.Saved.Collisions[v]==nil  then Environment.Saved.Collisions[v]=v.CanCollide end v.CanCollide=false end end
 		end)
 	else
-		if not next(Saved.Collisions) then return end
-		for part,canCollide in pairs(Saved.Collisions) do if IsAlive(part) then part.CanCollide=canCollide end end 
-		Saved.Collisions={}
+		if not next(Environment.Saved.Collisions) then return end
+		for part,canCollide in pairs(Environment.Saved.Collisions) do if IsAlive(part) then part.CanCollide=canCollide end end 
+		Environment.Saved.Collisions={}
 	end
 	CharacterFrame.NoclipToggle.Turns.BackgroundColor3=TurnColors[enabled]
 	Notify("Noclip","Noclip "..TurnTexts[enabled])
@@ -4324,7 +4322,7 @@ function Goto(s)
 end
 
 function EnableSpin(no,player,s)
-	Values.SpinSpeed=Strs.GetNumber(s,Saved.Values.SpinSpeed) or Values.SpinSpeed
+	Environment.Values.SpinSpeed=Strs.GetNumber(s,Environment.Saved.Values.SpinSpeed) or Environment.Values.SpinSpeed
 	if no==1 or no==0 then
 		SpinEnabled=no==1
 		SpinInstance,SpinCharAdded,SpinThread=ClearCache({SpinInstance,SpinCharAdded,SpinThread})
@@ -4338,7 +4336,7 @@ function EnableSpin(no,player,s)
 			SpinInstance=Instance.new("BodyAngularVelocity")
 			SpinInstance.Name=Strs.RandomString()
 			SpinInstance.Parent=rootPart
-			SpinInstance.AngularVelocity=Vector3.new(0,Values.SpinSpeed,0)
+			SpinInstance.AngularVelocity=Vector3.new(0,Environment.Values.SpinSpeed,0)
 			SpinInstance.MaxTorque=Vector3.new(0,math.huge,0)
 			SpinInstance.P=math.huge
 			local children=char:GetChildren()
@@ -4349,7 +4347,7 @@ function EnableSpin(no,player,s)
 			local function SetSpinInstanceSpeed(n) if IsAlive(SpinInstance) then SpinInstance.AngularVelocity=Vector3.new(0,n,0) end end
 			SpinThread=coroutine.create(function()
 				while SpinEnabled do
-					SetSpinInstanceSpeed(Values.SpinSpeed)
+					SetSpinInstanceSpeed(Environment.Values.SpinSpeed)
 					task.wait(0.2)
 					SetSpinInstanceSpeed(0)
 					task.wait(0.1)
@@ -4366,7 +4364,7 @@ function EnableSpin(no,player,s)
 end
 
 function EnableFly(no,player,s)
-	Values.FlySpeed=Strs.GetNumber(s,Saved.Values.FlySpeed) or Values.FlySpeed
+	Environment.Values.FlySpeed=Strs.GetNumber(s,Environment.Saved.Values.FlySpeed) or Environment.Values.FlySpeed
 	if no==1 or no==0 then
 		local enabled=no==1
 		FlyEnabled=enabled
@@ -4430,7 +4428,7 @@ function EnableFly(no,player,s)
 					else
 						flyMoving.Value=true
 					end
-					TweenService:Create(bodyVelocity,firstFlyTweenInfo,{Velocity=GetFlyDirection()*Values.FlySpeed}):Play()
+					TweenService:Create(bodyVelocity,firstFlyTweenInfo,{Velocity=GetFlyDirection()*Environment.Values.FlySpeed}):Play()
 				end
 			end)
 			table.insert(FlyCache,flyLoopConnection)
@@ -4465,14 +4463,14 @@ function ApplyAnimationSpeed(model,speed)
 end
 
 function EnableBoostAnim(no,player,s)
-	Values.AnimSpeed=Strs.GetNumber(s,Saved.Values.AnimSpeed) or Values.AnimSpeed
+	Environment.Values.AnimSpeed=Strs.GetNumber(s,Environment.Saved.Values.AnimSpeed) or Environment.Values.AnimSpeed
 	if no==1 or no==0 then
 		BoostAnimEnabled=no==1
 		BoostAnimThread=Cleanup(BoostAnimThread)
 		if no==1 then
 			BoostAnimThread=coroutine.create(function()
 				while BoostAnimEnabled do
-					ApplyAnimationSpeed(player.Character,Values.AnimSpeed)
+					ApplyAnimationSpeed(player.Character,Environment.Values.AnimSpeed)
 					task.wait(0.1) 
 				end
 			end)
@@ -4573,55 +4571,36 @@ function ResetAim()
 end
 
 function EnableAim(no,player,s1,s2,s3)
-	if s1 then s1=string.lower(s1) if Strs.IsOriginal(s1) then s1=Saved.Values.AimType else if s1=="player" then s1="Player" elseif s1=="team" then s1="Team" elseif s1=="npc" then s1="NPC" elseif s1=="zombie" then s1="Zombie" elseif s1=="all" then s1="All" else s1=nil end end end
-	if s2 then s2=string.lower(s2) if Strs.IsOriginal(s2) then s2=Saved.Values.AimTargetType else if s2=="head" then s2="Head" elseif s2=="root" then s2="Root" else s2=nil end end end
-	Values.AimType=s1 or Values.AimType
-	Values.AimTargetType=s2 or Values.AimTargetType
-	Values.AimRange=Strs.GetNumber(s3,Saved.Values.AimRange) or Values.AimRange
+	if s1 then s1=string.lower(s1) if Strs.IsOriginal(s1) then s1=Environment.Saved.Values.AimType else if s1=="player" then s1="Player" elseif s1=="team" then s1="Team" elseif s1=="npc" then s1="NPC" elseif s1=="zombie" then s1="Zombie" elseif s1=="all" then s1="All" else s1=nil end end end
+	if s2 then s2=string.lower(s2) if Strs.IsOriginal(s2) then s2=Environment.Saved.Values.AimLock else if s2=="head" then s2="Head" elseif s2=="root" then s2="Root" else s2=nil end end end
+	Environment.Values.AimType=s1 or Environment.Values.AimType
+	Environment.Values.AimLock=s2 or Environment.Values.AimLock
+	Environment.Values.AimRange=Strs.GetNumber(s3,Environment.Saved.Values.AimRange) or Environment.Values.AimRange
 	if no==1 or no==0 then
+		AimEnabled=no==1
+		AimLooped=Cleanup(AimLooped)
+		ResetAim()
 		if no==1 then
-			if Values.AimType=="NPC" or Values.AimType=="Zombie" then
-				if #NPCList<=0 then
-					NotifyWarn("Aimlock","NPCs is empty")
-					return
-				end
-			elseif Values.AimType=="Player" or Values.AimType=="Team" then
-				if (#PlayerList-1)<=0 then
-					NotifyWarn("Aimlock","Players is empty")
-					return
-				end
-			else
-				NotifyWarn("Aimlock","Aim Type does not match for "..Values.AimType)
-				return
-			end
-			AimEnabled=true
-			AimLooped=Cleanup(AimLooped)
-			ResetAim()
-			local char,aimType=player.Character,Values.AimType
+			local char,aimType,aimRange;
 			AimLooped=RunService.RenderStepped:Connect(function()
-				if not (AimEnabled and IsAlive(player)) then return end
-				char,aimType=player.Character,Values.AimType
+				if not AimEnabled then return end
+				char,aimType,aimRange=player.Character,Environment.Values.AimType,Environment.Values.AimRange
 				if IsDied(char) then return end
 				local rp=GetRootPart(char)
 				if not rp then return end
 				if IsDied(AimLocked) then
-					AimLocked=GetNearest(aimType,Values.AimRange)
+					AimLocked=GetNearest(aimType,aimRange)
 				end
 				if not IsDied(AimLocked) then
 					local orp=GetRootPart(AimLocked)
 					if not orp then ResetAim() return end
 					local distance=(orp.Position-rp.Position).Magnitude
-					if distance>Values.AimRange then ResetAim() return end
+					if distance>aimRange then ResetAim() return end
 					if aimType=="Zombie" then local h=GetHumanoid(AimLocked) if not h or h.MoveDirection.Magnitude<=0 or h.WalkToPoint.Magnitude<=0 then  ResetAim() return end  end
-					if aimType=="Team" or aimType=="Player" then local otherPlayer=GetPlayer(AimLocked) if not otherPlayer or (aimType=="Team" and otherPlayer.TeamColor==LocalPlayer.TeamColor) then ResetAim() return end end
+					if aimType=="Team" or aimType=="Player" then local otherPlayer=GetPlayer(AimLocked) if not otherPlayer or (aimType=="Team" and otherPlayer.TeamColor==player.TeamColor) then ResetAim() return end end
 					if aimType=="NPC" then local isFront=CanSee(aimRaycastParams,orp,rp,90) if not isFront then return end end
-					local part=nil
-					if Values.AimTargetType=="Head" then
-						part=GetHeadPart(AimLocked)
-					else
-						part=GetRootPart(AimLocked)
-					end
-					if IsAlive(part) then
+					local part=Environment.Values.AimLock=="Head" and GetHeadPart(AimLocked) or GetRootPart(AimLocked)
+					if part then
 						local cameraPosition=LocalCamera.CFrame.Position
 						LocalCamera.CFrame=CFrame.new(cameraPosition,part.Position)
 					end
@@ -4629,12 +4608,6 @@ function EnableAim(no,player,s1,s2,s3)
 					ResetAim()
 				end
 			end)
-		else
-			AimEnabled=false
-			AimLooped=Cleanup(AimLooped)
-			LocalCamera.CameraSubject=player.Character or player.CharacterAdded:Wait()
-			LocalCamera.CameraType=Enum.CameraType.Custom
-			AimLocked=nil
 		end
 		CharacterFrame.AimlockToggle.Turns.BackgroundColor3=TurnColors[no==1]
 		Notify("Aimlock","Aim lock turning "..(no==1 and "on" or "off"))
@@ -4666,7 +4639,7 @@ function HitBoxExpand(player)
 		if userId==LocalPlayer.UserId then return end
 		repeat task.wait() until not (HitboxEnabled and IsAlive(player)) or GetCharacter(player.Character)~=nil
 		if not (HitboxEnabled and IsAlive(player)) then return end
-		local char,size,superHitboxActive,t=player.Character,Values.HitboxSize,SuperHitboxEnabled,HitboxCache[userId] or {}
+		local char,size,superHitboxActive,t=player.Character,Environment.Values.HitboxSize,SuperHitboxEnabled,HitboxCache[userId] or {}
 		local function UpdateHitboxCollision()
 			local results={}
 			for i,v in ipairs(char:GetChildren()) do
@@ -4682,7 +4655,7 @@ function HitBoxExpand(player)
 		end
 		local function UpdateHitbox()
 			local data={}
-			size=Values.HitboxSize
+			size=Environment.Values.HitboxSize
 			if not size or size<=1 then
 				data.Size=Vector3.new(2,1,1)
 				data.Transparency=0.2
@@ -4734,7 +4707,7 @@ function HitBoxExpand(player)
 		t.Instances=t.Instances or UpdateHitboxCollision()
 		t.Looped=Cleanup(t.Looped)
 		t.Looped=RunService.RenderStepped:Connect(function()
-			if IsAlive(player) and size~=Values.HitboxSize or char~=player.Character or superHitboxActive~=SuperHitboxEnabled then UpdateHitbox() end
+			if IsAlive(player) and size~=Environment.Values.HitboxSize or char~=player.Character or superHitboxActive~=SuperHitboxEnabled then UpdateHitbox() end
 		end)
 		HitboxCache[userId]=t
 	end)
@@ -4753,7 +4726,7 @@ function RemoveHitbox(userId)
 end
 
 function EnableHitbox(no,s)
-	Values.HitboxSize=Strs.GetNumber(s,Saved.Values.HitboxSize) or Values.HitboxSize
+	Environment.Values.HitboxSize=Strs.GetNumber(s,Environment.Saved.Values.HitboxSize) or Environment.Values.HitboxSize
 	if no==1 or no==0 then
 		if no==1 then
 			if HitboxEnabled then return end HitboxEnabled=true
@@ -4792,7 +4765,7 @@ end
 function EnableDisco(enabled)
 	if enabled then
 		if DiscoEnabled then return end DiscoEnabled=true
-		Saved.Lighting.Ambient=Lighting.Ambient
+		Environment.Saved.Lighting.Ambient=Lighting.Ambient
 		DiscoThread=Cleanup(DiscoThread)
 		DiscoThread=coroutine.create(function()
 			while DiscoEnabled do
@@ -4804,7 +4777,7 @@ function EnableDisco(enabled)
 	else
 		if not DiscoEnabled then return end DiscoEnabled=false
 		DiscoThread=Cleanup(DiscoThread)
-		Lighting.Ambient=Saved.Lighting.Ambient
+		Lighting.Ambient=Environment.Saved.Lighting.Ambient
 	end
 	LightingFrame.DiscoToggle.Turns.BackgroundColor3=TurnColors[enabled]
 	Notify("Disco","Disco "..TurnTexts[enabled])
@@ -5008,20 +4981,20 @@ for k,t in ipairs({{"Player","maxzoom",10,PlayerFrame.MaxZooms},{"Player","minzo
 		l.Value=nil
 		local savedValues={
 			["maxzoom"]={
-				["Value"]=Saved.Player.CameraMaxZoomDistance,
+				["Value"]=Environment.Saved.Player.CameraMaxZoomDistance,
 				["Percent"]=15,
 				["EndValue"]=9999
 			},
 			["minzoom"]={
-				["Value"]=Saved.Player.CameraMinZoomDistance,
+				["Value"]=Environment.Saved.Player.CameraMinZoomDistance,
 				["Percent"]=20
 			},
 			["walkspeed"]={
-				["Value"]=Saved.Humanoid.WalkSpeed,
+				["Value"]=Environment.Saved.Humanoid.WalkSpeed,
 				["Percent"]=10
 			},
 			["health"]={
-				["Value"]=Saved.Humanoid.Health,
+				["Value"]=Environment.Saved.Humanoid.Health,
 				["Percent"]=25,
 				["EndValue"]=math.huge
 			}
@@ -5043,7 +5016,7 @@ for k,t in ipairs({{"Player","maxzoom",10,PlayerFrame.MaxZooms},{"Player","minzo
 						results[#results+1]=math.floor(v1*multi)
 					end
 				else
-					results={Saved.Humanoid.WalkSpeed,24,32,40,50,60,70,80,90,100}
+					results={Environment.Saved.Humanoid.WalkSpeed,24,32,40,50,60,70,80,90,100}
 				end
 			else
 				results[#results+1]=v1
@@ -5068,7 +5041,7 @@ for k,t in ipairs({{"Player","maxzoom",10,PlayerFrame.MaxZooms},{"Player","minzo
 			end
 			if IsAlive(l.TextBox) then l.TextBox.Text=Strs.ToFloatString(results[1]) end
 		else
-			v1,v2=Saved.Humanoid.JumpHeight,Saved.Humanoid.JumpPower
+			v1,v2=Environment.Saved.Humanoid.JumpHeight,Environment.Saved.Humanoid.JumpPower
 			length=10
 			percent=10
 			local t1={}
@@ -5370,15 +5343,15 @@ AddCommand({"fixcamera","fixcam",'restorecamera',"restorecam"},function()
 end)
 
 AddCommand({"aimtype"},function(s)
-	EnableAim(2,LocalPlayer,s,Values.AimTargetType,tostring(Values.AimRange))
+	EnableAim(2,LocalPlayer,s,Environment.Values.AimTargetType,tostring(Environment.Values.AimRange))
 end)
 
 AddCommand({"aimtarget"},function(s)
-	EnableAim(2,LocalPlayer,Values.AimType,s,tostring(Values.AimRange))
+	EnableAim(2,LocalPlayer,Environment.Values.AimType,s,tostring(Environment.Values.AimRange))
 end)
 
 AddCommand({"aimrange"},function(s)
-	EnableAim(2,LocalPlayer,Values.AimType,Values.AimTargetType,s)
+	EnableAim(2,LocalPlayer,Environment.Values.AimType,Environment.Values.AimLock,s)
 end)
 
 AddCommand({"aim"},function(s1,s2,s3)
@@ -5824,7 +5797,7 @@ function RemovePlayer(userId)
 end
 
 SafePlayer(function(player)
-	if ESPEnabled then ESP(player) end
+	if ESPEnabled then ESPPlayer(player) end
 	local index=#PlayerList+1
 	PlayerList[index]={["Index"]=index,["Value"]=player,["UserId"]=player.UserId,["Name"]=player.Name,["DisplayName"]=player.DisplayName,["Age"]=player.AccountAge}
 	AddPlayerFrame(player,index)
@@ -5835,7 +5808,7 @@ end,function(player)
 	local playerUserId=IsAlive(PlayerInstance) and PlayerInstance.UserId or nil
 	if playerUserId and playerUserId==userId then PlayerInstance=nil end
 	RemovePlayer(userId)
-	RemoveESP(userId)
+	RemoveESPPlayer(userId)
 	RemoveHitbox(userId)
 	if viewUserId and viewUserId==userId then
 		if #PlayerList<=2 then
@@ -5844,7 +5817,12 @@ end,function(player)
 			NextSelectPlayer()
 		end
 	end
-	
+end)
+
+MainCache.BackPressed=BackButton.MouseButton1Click:Connect(function()
+	OpenInfo(false)
+	ButtonScroller.Visible=true
+	BackButton.Visible=false
 end)
 
 MainCache.PlayerBoxTextChanged=SelectPlayerFrame.PlayerBox:GetPropertyChangedSignal("Text"):Connect(function()
@@ -6099,27 +6077,27 @@ CharacterCommandList={
 	{CharacterFrame.BringButton,function() if not IsAlive(PlayerInstance) then NotifyWarn("Bring","No player selected") return nil end Notify("Bring",":)") return nil end,"Button"},
 	{CharacterFrame.GotoButton,function() if not IsAlive(PlayerInstance) then NotifyWarn("Goto","No player selected") return nil end return `goto {tostring(PlayerInstance.UserId)}` end,"Button"},
 	{CharacterFrame.WallHopButton,function() return "wallhop" end,"Button"},
-	{CharacterFrame.AimlockTypeChosen,function() local s=Values.AimType if s=="Player" then s="Team" elseif s=="Team" then s="Zombie" elseif s=="Zombie" then s="NPC" else s="Player" end CharacterFrame.AimlockTypeChosen.Text="Type: "..s return `aimtype {s}` end,"Button"},
-	{CharacterFrame.AimlockTargetChosen,function() local s=Values.AimTargetType if s=="Head" then s="Root" else s="Head" end CharacterFrame.AimlockTargetChosen.Text="Target: "..s return `aimtarget {s}` end,"Button"},
+	{CharacterFrame.AimlockTypeChosen,function() local s=Environment.Values.AimType if s=="Player" then s="Team" elseif s=="Team" then s="Zombie" elseif s=="Zombie" then s="NPC" else s="Player" end CharacterFrame.AimlockTypeChosen.Text="Type: "..s return `aimtype {s}` end,"Button"},
+	{CharacterFrame.AimlockTargetChosen,function() local s=Environment.Values.AimTargetType if s=="Head" then s="Root" else s="Head" end CharacterFrame.AimlockTargetChosen.Text="Target: "..s return `aimtarget {s}` end,"Button"},
 	{CharacterFrame.AimlockRangeBox,function(enterPress,text) return enterPress and `aimrange {text}` or nil end,"TextBox"},
-	{CharacterFrame.AimlockToggle,function() return AimEnabled and "unaim" or `aim {Values.AimType} {Values.AimTargetType} {Values.AimRange}` end,"Button"},
+	{CharacterFrame.AimlockToggle,function() return AimEnabled and "unaim" or `aim {Environment.Values.AimType} {Environment.Values.AimTargetType} {Environment.Values.AimRange}` end,"Button"},
 	{CharacterFrame.AutoJumpToggle,function() return AutoJumpEnabled and "unautojump" or "autojump" end,"Button"},
 	{CharacterFrame.HitboxSizeBox,function(enterPress,text) return enterPress and `hitboxsize {text}` or nil end,"TextBox"},
-	{CharacterFrame.HitboxToggle,function() return HitboxEnabled and "unhitbox" or `hitbox {Values.HitboxSize}` end,"Button"},
+	{CharacterFrame.HitboxToggle,function() return HitboxEnabled and "unhitbox" or `hitbox {Environment.Values.HitboxSize}` end,"Button"},
 	{CharacterFrame.SuperHitboxToggle,function() return "togglesuperhitbox" end,"Button"},
 	{CharacterFrame.InvisibleToggle,function() return InvisibleEnabled and "visible" or "invisible" end,"Button"},
 	{CharacterFrame.FollowToggle,function() if not IsAlive(PlayerInstance) then NotifyWarn("Follow","No player selected") return nil end return FollowEnabled and "unfollow" or `follow {tostring(PlayerInstance.UserId)}` end,"Button"},
 	{CharacterFrame.NoclipToggle,function() return NoclipEnabled and "clip" or "noclip" end,"Button"},
 	{CharacterFrame.AntiFlingToggle,function() return AntiFlingEnabled and `unantifling` or `antifling` end,"Button"},
 	{CharacterFrame.SpinSpeedBox,function(enterPress,text) return enterPress and `spinspeed {text}` or nil end,"TextBox"},
-	{CharacterFrame.SpinToggle,function() return SpinEnabled and "unspin" or `spin {Values.SpinSpeed}` end,"Button"},
+	{CharacterFrame.SpinToggle,function() return SpinEnabled and "unspin" or `spin {Environment.Values.SpinSpeed}` end,"Button"},
 	{CharacterFrame.FlySpeedBox,function(enterPress,text) return enterPress and `flyspeed {text}` or nil end,"TextBox"},
-	{CharacterFrame.FlyToggle,function() return FlyEnabled and "unfly" or `fly {Values.FlySpeed}` end,"Button"},
+	{CharacterFrame.FlyToggle,function() return FlyEnabled and "unfly" or `fly {Environment.Values.FlySpeed}` end,"Button"},
 	{CharacterFrame.NoHatToggle,function() return NoAccessoryEnabled and "reaccessory" or "noaccessory" end,"Button"},
 	{CharacterFrame.ESPPlayerToggle,function() return ESPEnabled and "unesp" or "esp" end,"Button"},
 	{CharacterFrame.ESPNPCToggle,function() return ESPNPCEnabled and "unespnpc" or "espnpc" end,"Button"},
 	{CharacterFrame.AnimSpeedBox,function(enterPress,text) return enterPress and `animspeed {text}` or nil end,"TextBox"},
-	{CharacterFrame.BoostAnimToggle,function() return BoostAnimEnabled and `unboostanim` or `boostanim {Values.AnimSpeed}` end,"Button"},
+	{CharacterFrame.BoostAnimToggle,function() return BoostAnimEnabled and `unboostanim` or `boostanim {Environment.Values.AnimSpeed}` end,"Button"},
 	{CharacterFrame.IdleAnimToggle,function() return IdleAnimEnabled and "unidleanim" or "idleanim" end,"Button"},
 	{CharacterFrame.DanceButton,function() return "dance" end,"Button"},
 	{CharacterFrame.NoDanceButton,function() return "nodance" end,"Button"}
