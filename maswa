@@ -132,7 +132,7 @@ local CoreGuiTypes={
 local CoreGuiTypeIndex,CoreGuiTypesList=1,{"Inventory","Leaderboard","Emotes","Chat","Captures","SelfView","All","Console"}
 local FixIndex,Fixes=1,{"Lighting","Camera","Player","Accessory","Boost","Other","All"}
 local UpdateIndex,UpdateList=1,{"Boost","Player","All"}
-
+local NPCLength=0
 local NPCData,PlayerData={},{}
 local InfoCache,FlyCache,TeleportToolCache,FlashlightToolCache,ESPToolCache,ESPToolObjectCache,ESPCache,ESPNPCCache,HitboxCache={},{},{},{},{},{},{},{},{}
 local SelectIndex,SelectInfo=1,nil
@@ -3542,12 +3542,13 @@ function RemoveNPC(npc)
 	local name=npc.Name
 	if data.Character then data.Character=nil end
 	if data.Connections then for i,v in next,data.Connections do v:Disconnect() data.Connections[i]=nil end data.Connections=nil end
-	NPCData[npc]=nil
+	NPCData[npc]=nil NPCLength-=1
 end
 
 function AddNPC(npc)
 	if NPCData[npc] then return end
 	NPCData[npc]={["Character"]=npc,["Connections"]={}}
+    NPCLength+=1
 	local name=npc.Name
 	local humanoid=npc:FindFirstChildOfClass("Humanoid")
 	if humanoid then
@@ -3580,16 +3581,16 @@ function AddNPC(npc)
 	for i,v in next,workspace:GetDescendants() do
 		task.defer(function() task.wait() if IsNPC(v) then AddNPC(v) end end)
 	end
-
-	MainCache.NPCAdded=workspace.DescendantAdded:Connect(function(v)
-		task.wait()
-		if IsNPC(v) then AddNPC(v) end
-	end)
-
-	MainCache.NPCRemoving=workspace.DescendantRemoving:Connect(function(v)
-		if IsNPC(v) then RemoveNPC(v) end
-	end)
 end
+
+MainCache.NPCAdded=workspace.DescendantAdded:Connect(function(v)
+	task.wait()
+	if IsNPC(v) then AddNPC(v) end
+end)
+
+MainCache.NPCRemoving=workspace.DescendantRemoving:Connect(function(v)
+	if IsNPC(v) then RemoveNPC(v) end
+end)
 
 function UpdateTextSize(label)
 	local c=#label.Text label.TextSize=if c>=90 and c<101 then 0 elseif c>=60 and c<70 then 7 elseif c>=50 and c<60 then 8 elseif c>=10 and c<20 then 10 else 14; label.TextScaled=label.TextSize<=0
@@ -4196,6 +4197,7 @@ end
 function EnableESPNPC(enabled)
 	ESPNPCEnabled=enabled
 	if enabled then
+        warn("NPC Length:,NPCLength)
 		for npc,k in pairs(NPCData) do ESPNPC(npc) end
 	else
 		ClearCache(ESPNPCCache) ESPNPCCache={}
