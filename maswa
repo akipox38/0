@@ -121,8 +121,7 @@ local TurnTexts={
 	[false]="Disabled",
 	[true]="Enabled"
 }
-local PlayerList={}
-local NPCList={}
+
 local CoreGuiTypes={
 	["inventory"]=Enum.CoreGuiType.Backpack,
 	["leaderboard"]=Enum.CoreGuiType.PlayerList,
@@ -134,6 +133,7 @@ local CoreGuiTypeIndex,CoreGuiTypesList=1,{"Inventory","Leaderboard","Emotes","C
 local FixIndex,Fixes=1,{"Lighting","Camera","Player","Accessory","Boost","Other","All"}
 local UpdateIndex,UpdateList=1,{"Boost","Player","All"}
 
+local NPCData,PlayerData={},{}
 local InfoCache,FlyCache,TeleportToolCache,FlashlightToolCache,ESPToolCache,ESPToolObjectCache,ESPCache,ESPNPCCache,HitboxCache={},{},{},{},{},{},{},{},{}
 local SelectIndex,SelectInfo=1,nil
 local raycastParams=RaycastParams.new()
@@ -143,7 +143,6 @@ local TurnVisible;
 local DanceInstance,SpinInstance,AimLocked,ViewInstance;
 local InfoEnabled,ThirdPersonEnabled,DiscoEnabled,MaxZoomEnabled,MinZoomEnabled,AimEnabled,ESPEnabled,ESPNPCEnabled,BoostAnimEnabled,IdleAnimEnabled,AntiFlingEnabled,WalkSpeedEnabled,HealthEnabled,JumpEnabled,InvisibleEnabled,SpinEnabled,FollowEnabled,NoclipEnabled,FlyEnabled,ViewEnabled,AutoJumpEnabled,NoAccessoryEnabled,HitboxEnabled,SuperHitboxEnabled,TeleportToolEnabled,ESPToolEnabled,FlashlightToolEnabled=false,LocalPlayer.CameraMode==Enum.CameraMode.Classic,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false
 local AFKIdled,AntiLagObjectAdded,SpinCharAdded,AntiFlingCharAdded,ViewCharAdded,AntiFlingAdded,FollowLooped,AutoJumpLooped,NoclipLooped,AimLooped,MaxZoomThread,MinZoomThread,DiscoThread,WalkSpeedThread,HealthThread,JumpThread,DanceAnimTrack,BoostAnimThread,SpinThread;
-
 
 for i,v in ipairs(Enum.CoreGuiType:GetEnumItems()) do CoreGuiTypes[string.lower(v.Name)]=v end
 
@@ -338,11 +337,11 @@ function IsFling(v)
 	return IsAlive(v) and v.ClassName=="BodyGyro" or v.ClassName=="BodyPosition" or v.ClassName=="BodyForce" or v.ClassName=="BodyThrust" or v.ClassName=="BodyVelocity" or v.ClassName=="BodyAngularVelocity"
 end
 function IsCharacter(v)
-	return IsAlive(v) and v:IsDescendantOf(workspace) and v.ClassName=="Model" and IsAlive(v.PrimaryPart) and v:FindFirstChildOfClass("Humanoid")
+	return IsAlive(v) and v.ClassName=="Model" and v:FindFirstChildOfClass("Humanoid")
 end
 
 function IsDied(v)
-	if IsCharacter(v) then local humanoid=v:FindFirstChildOfClass("Humanoid") if humanoid and humanoid:GetState()~=Enum.HumanoidStateType.Dead and humanoid.Health>0 and humanoid.MaxHealth>0 then return false end  end return true
+	if IsAlive(v) and v.ClassName=="Model" then local humanoid=v:FindFirstChildOfClass("Humanoid") if humanoid and humanoid.Health>0 and humanoid.MaxHealth>0 then return false end  end return true
 end
 function SetPartAnchoredChildren(v,anchored)
 	if IsAlive(v) then for i,v in ipairs(v:GetChildren()) do if IsAlive(v) and v.ClassName=="Part" or v.ClassName=="MeshPart" then v.Anchored=anchored end end end
@@ -379,39 +378,6 @@ end
 
 function Round(num,numDecimalPlaces)
 	local multi=10^(numDecimalPlaces or 0) return math.floor(num*multi+0.5)/multi
-end
-
--- NPC Utilities
-function IsNPC(v)
-	if IsCharacter(v) then return not GetPlayer(v) end return false
-end
-
-function SafeNPC(added,removed)
-	local descendants=workspace:GetDescendants()
-	for i,v in ipairs(descendants) do
-		task.spawn(function() 
-			if IsNPC(v) then 
-				if not IsDied(v) then 
-					added(v) 
-
-				else 
-					removed(v) 
-				end 
-			end
-		end)
-	end
-	workspace.DescendantAdded:Connect(function(v)
-		if IsNPC(v) then 
-			if not IsDied(v) then 
-				added(v) 
-			else 
-				removed(v) 
-			end 
-		end
-	end)
-	workspace.DescendantRemoving:Connect(function(v)
-		if IsNPC(v) then removed(v) end
-	end)
 end
 
 -- Player Utilities
@@ -3566,7 +3532,64 @@ MainCache.ClosePressed=CloseButton.MouseButton1Click:Connect(function()
 	CloseMenu()
 end)
 
-local TextService=game:GetService("TextService")
+function IsNPC(object)
+	return object.ClassName=="Model" and object:FindFirstChildOfClass("Humanoid") and not Players:GetPlayerFromCharacter(object)
+end
+
+function RemoveNPC(npc)
+	local data=NPCData[npc]
+	if not data then return end
+	local name=npc.Name
+	if data.Character then data.Character=nil end
+	if data.Connections then for i,v in next,data.Connections do v:Disconnect() data.Connections[i]=nil end data.Connections=nil end
+	NPCData[npc]=nil
+end
+
+function AddNPC(npc)
+	if NPCData[npc] then return end
+	NPCData[npc]={["Character"]=npc,["Connections"]={}}
+	local name=npc.Name
+	local humanoid=npc:FindFirstChildOfClass("Humanoid")
+	if humanoid then
+		local healthChanged,maxHealthChanged,died;
+		healthChanged=humanoid:GetPropertyChangedSignal("Health"):Connect(function()
+			if humanoid and humanoid.Parent and humanoid.Health<=0 then
+				healthChanged:Disconnect()
+				RemoveNPC(npc)
+			end
+		end)
+		table.insert(NPCData[npc].Connections,healthChanged)
+		maxHealthChanged=humanoid:GetPropertyChangedSignal("MaxHealth"):Connect(function()
+			if humanoid and humanoid.Parent and humanoid.MaxHealth<=0 then
+				maxHealthChanged:Disconnect()
+				RemoveNPC(npc)
+			end
+			healthChanged:Disconnect()
+			RemoveNPC(npc)
+		end)
+		table.insert(NPCData[npc].Connections,maxHealthChanged)
+		died=humanoid.Died:Connect(function()
+			died:Disconnect()
+			RemoveNPC(npc)
+		end)
+		table.insert(NPCData[npc].Connections,died)
+	end
+	if ESPNPCEnabled then ESPNPC(npc)
+	end
+
+	for i,v in next,workspace:GetDescendants() do
+		task.defer(function() task.wait() if IsNPC(v) then AddNPC(v) end end)
+	end
+
+	MainCache.NPCAdded=workspace.DescendantAdded:Connect(function(v)
+		task.wait()
+		if IsNPC(v) then AddNPC(v) end
+	end)
+
+	MainCache.NPCRemoving=workspace.DescendantRemoving:Connect(function(v)
+		if IsNPC(v) then RemoveNPC(v) end
+	end)
+end
 
 function UpdateTextSize(label)
 	local c=#label.Text label.TextSize=if c>=90 and c<101 then 0 elseif c>=60 and c<70 then 7 elseif c>=50 and c<60 then 8 elseif c>=10 and c<20 then 10 else 14; label.TextScaled=label.TextSize<=0
@@ -3687,7 +3710,8 @@ function OpenInfo(enabled)
 				local Asset=GetProductInfo(PlaceId)
 				if Asset then placeName=Asset.Name else if workspace.Parent then placeName=workspace.Parent.Name end end
 				InfoScroller.PlaceNames.Title.Text=`Place Name: {placeName}`
-				InfoScroller.PlayersLabel.Text=`{#PlayerList} Players`
+				local amountPlayers=#Players:GetPlayers()
+				InfoScroller.PlayersLabel.Text=`{amountPlayers} Players`
 				maxPlayers=Players.MaxPlayers
 				InfoScroller.MaxPlayerLabel.Text=tostring(maxPlayers).." Max Players"
 				local distributedGameTime=workspace.DistributedGameTime
@@ -4172,7 +4196,7 @@ end
 function EnableESPNPC(enabled)
 	ESPNPCEnabled=enabled
 	if enabled then
-		for i,npc in ipairs(NPCList) do ESPNPC(npc.Character) end
+		for npc,k in pairs(NPCData) do ESPNPC(npc) end
 	else
 		ClearCache(ESPNPCCache) ESPNPCCache={}
 	end
@@ -4533,30 +4557,32 @@ end
 function GetNearest(mode,range)
 	local userId,value,newDistance,characters=LocalPlayer.UserId,nil,math.huge,{}
 	if mode=="Player" or mode=="Team" then
-		for i,v in ipairs(PlayerList) do if v.UserId~=userId then table.insert(characters,v.Value and v.Value.Character or nil) end end
+		for i,v in ipairs(PlayerData) do if IsAlive(v) and v.UserId~=userId and not IsDied(v.Value and v.Value.Character or nil) then table.insert(characters,v.Character) end end
 	elseif mode=="Zombie" or mode=="NPC" then
-		for i,v in ipairs(NPCList) do table.insert(characters,v.Character) end
+		for v,k in pairs(NPCData) do if IsAlive(v) then table.insert(characters,v) end end
 	else
 		return value,newDistance
 	end
 	aimRaycastParams.FilterDescendantsInstances=characters
 	for i,v in ipairs(characters) do
-		if IsDied(v) then continue end
-		local rp,orp=GetRootPart(LocalPlayer.Character),GetRootPart(v)
-		if not (rp and orp) then continue end
-		local distance=math.floor((orp.Position-rp.Position).Magnitude)
-		if distance<=range and distance<newDistance then
-			if mode=="Zombie" then local h=GetHumanoid(v) if not h or h.MoveDirection.Magnitude<=0 or h.WalkToPoint.Magnitude<=0 then continue end end
-			if mode=="Team" or mode=="Player" then local player=GetPlayer(v) if not player or (mode=="Team" and player.TeamColor==LocalPlayer.TeamColor) then continue end end
-			if mode=="NPC" then
-				local isFront=CanSee(aimRaycastParams,orp,rp,90)
-				if isFront then
-					value=v
-					newDistance=distance
+		if not IsDied(v) then
+			local rp,orp=GetRootPart(LocalPlayer.Character),GetRootPart(v)
+			if rp and orp then
+				local distance=math.floor((orp.Position-rp.Position).Magnitude)
+				if distance<=range and distance<newDistance then
+					if mode=="Zombie" then local h=GetHumanoid(v) if not h or h.MoveDirection.Magnitude<=0 or h.WalkToPoint.Magnitude<=0 then continue end end
+					if mode=="Team" or mode=="Player" then local player=GetPlayer(v) if not player or (mode=="Team" and player.TeamColor==LocalPlayer.TeamColor) then continue end end
+					if mode=="NPC" then
+						local isFront=CanSee(aimRaycastParams,orp,rp,90)
+						if isFront then
+							value=v
+							newDistance=distance
+						end
+					else
+						value=v
+						newDistance=distance
+					end
 				end
-			else
-				value=v
-				newDistance=distance
 			end
 		end
 	end
@@ -4592,8 +4618,10 @@ function EnableAim(no,player,s1,s2,s3)
 					AimLocked=GetNearest(aimType,aimRange)
 				end
 				if not IsDied(AimLocked) then
-					local orp=GetRootPart(AimLocked)
-					if not orp then ResetAim() return end
+					local h=GetHumanoid(AimLocked)
+					if not h then ResetAim() return end
+					local orp=h.RootPart
+					if not IsAlive(orp) then ResetAim() return end
 					local distance=(orp.Position-rp.Position).Magnitude
 					if distance>aimRange then ResetAim() return end
 					if aimType=="Zombie" then local h=GetHumanoid(AimLocked) if not h or h.MoveDirection.Magnitude<=0 or h.WalkToPoint.Magnitude<=0 then  ResetAim() return end  end
@@ -4936,26 +4964,6 @@ function ClearAllCache()
 	TeleportToolCache={} FlashlightToolCache={} ESPToolCache={}
 end
 
-function RemoveNPC(npc)
-	for i,v in ipairs(NPCList) do if v.Character==npc then v.Character=nil if v.Died then v.Died:Disconnect() v.Died=nil end NPCList[i]=nil break end end
-end
-
-SafeNPC(function(npc)
-	local died;
-	died=npc:FindFirstChildOfClass("Humanoid").Died:Connect(function() 
-		died:Disconnect() 
-		RemoveNPC(npc)
-		RemoveESPNPC(npc)
-	end)
-	NPCList[#NPCList+1]={["Character"]=npc,["Died"]=died}
-	if ESPNPCEnabled then
-		ESPNPC(npc)
-	end
-end,function(npc)
-	RemoveNPC(npc)
-	RemoveESPNPC(npc)
-end)
-
 BarList={}
 for k,t in ipairs({{"Player","maxzoom",10,PlayerFrame.MaxZooms},{"Player","minzoom",10,PlayerFrame.MinZooms},{"Humanoid","walkspeed",10,BoostFrame.WalkSpeeds},{"Humanoid","health",10,BoostFrame.Healths},{"Humanoid","jumppower",10,BoostFrame.Jumps}}) do
 	local index=#BarList+1
@@ -5195,7 +5203,7 @@ AddCommand({"rejoin","rj"},function()
 	if IsStudio then return end
 	Notify("Rejoin","Rejoining...")
 	local player=LocalPlayer
-	if #PlayerList<=1 then
+	if #Players:GetPlayers()<=1 then
 		player:Kick("\nRejoining...")
 		task.wait()
 		TeleportService:Teleport(PlaceId,player)
@@ -5752,19 +5760,19 @@ local LocalUserId=LocalPlayer.UserId
 
 function AddPlayerFrame(player,index)
 	local userId,userName=player.UserId,player.Name
-	local data=PlayerList[index]
+	local data=PlayerData[index]
 	local template=SelectPlayerFrame.PlayersScroller.PlayerTemplate:Clone()
 	template.TextLabel.Text=player.DisplayName
 	template.Name=player.Name.."_Button"
 	template.ImageLabel.Image=GetPlayerIcon(userId)
-	data.ButtonConnection=template.MouseButton1Click:Connect(function()
+	data.Connection=template.MouseButton1Click:Connect(function()
 		SelectIndex,SelectInfo=index,{["Value"]=player,["Name"]=userName,["UserId"]=userId,["Template"]=template}
 		ApplyPlayerFrame()
 	end)
 	template.Visible=true
 	template.Parent=SelectPlayerFrame.PlayersScroller
 	data.Template=template
-	PlayerList[index]=data
+	PlayerData[index]=data
 	if userId==LocalUserId then
 		SelectIndex,SelectInfo=index,{["Value"]=player,["Name"]=userName,["UserId"]=userId,["Template"]=template}
 		ApplyPlayerFrame()
@@ -5772,34 +5780,32 @@ function AddPlayerFrame(player,index)
 end
 
 function NextSelectPlayer()
-	SelectIndex,SelectInfo=NextValue(PlayerList,SelectIndex)
+	SelectIndex,SelectInfo=NextValue(PlayerData,SelectIndex)
 	ApplyPlayerFrame()
 end
 
 function PreviousSelectPlayer()
-	SelectIndex,SelectInfo=PreviousValue(PlayerList,SelectIndex)
+	SelectIndex,SelectInfo=PreviousValue(PlayerData,SelectIndex)
 	ApplyPlayerFrame()
 end
 
 function RemovePlayer(userId)
-	local index=nil
-	for i=1,#PlayerList do
-		local playerData=PlayerList[i]
-		if playerData and playerData.UserId==userId then
-			index=i
-			Cleanup(playerData.ButtonConnection) playerData.ButtonConnection=nil
-			Cleanup(playerData.Template) playerData.Template=nil
-			PlayerList[i]=playerData
+	for i=1,#PlayerData do
+		local v=PlayerData[i]
+		if v and v.UserId==userId then
+			v.Connection=Cleanup(v.Connection)
+			v.Template=Cleanup(v.Template)
+			v[i]=v
+			table.remove(PlayerData,i)
 			break
 		end
 	end
-	if index then table.remove(PlayerList,index) end
 end
 
 SafePlayer(function(player)
 	if ESPEnabled then ESPPlayer(player) end
-	local index=#PlayerList+1
-	PlayerList[index]={["Index"]=index,["Value"]=player,["UserId"]=player.UserId,["Name"]=player.Name,["DisplayName"]=player.DisplayName,["Age"]=player.AccountAge}
+	local index=#PlayerData+1
+	PlayerData[index]={["Index"]=index,["Value"]=player,["UserId"]=player.UserId,["Name"]=player.Name,["DisplayName"]=player.DisplayName,["Age"]=player.AccountAge}
 	AddPlayerFrame(player,index)
 end,function(player)
 	local userId=player.UserId
@@ -5811,7 +5817,7 @@ end,function(player)
 	RemoveESPPlayer(userId)
 	RemoveHitbox(userId)
 	if viewUserId and viewUserId==userId then
-		if #PlayerList<=2 then
+		if #Players:GetPlayers()<=2 then
 			Unview("View turned off (player left)")
 		else
 			NextSelectPlayer()
@@ -5828,7 +5834,7 @@ end)
 MainCache.PlayerBoxTextChanged=SelectPlayerFrame.PlayerBox:GetPropertyChangedSignal("Text"):Connect(function()
 	local inputText=string.lower(SelectPlayerFrame.PlayerBox.Text)
 	local inputNumber=tonumber(inputText)
-	for k,v in pairs(PlayerList) do 
+	for k,v in pairs(PlayerData) do 
 		if IsAlive(v.Template) then 
 			local visible=false
 			if inputNumber then
@@ -5851,7 +5857,7 @@ MainCache.PlayerBoxFocusLost=SelectPlayerFrame.PlayerBox.FocusLost:Connect(funct
 	local player=GetPlayer(inputText)
 	if not IsAlive(player) then return end
 	local userId,userName,template=player.UserId,player.Name,nil
-	for i,v in ipairs(PlayerList) do if IsAlive(v.Template) and v.UserId and v.UserId==userId then template=v.Template SelectIndex=i break end end
+	for i,v in ipairs(PlayerData) do if IsAlive(v.Template) and v.UserId and v.UserId==userId then template=v.Template SelectIndex=i break end end
 	SelectInfo={["Value"]=player,["Name"]=userName,["UserId"]=userId,["Template"]=template}
 	ApplyPlayerFrame()
 end)
