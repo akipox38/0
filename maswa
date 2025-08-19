@@ -132,7 +132,7 @@ local CoreGuiTypes={
 local CoreGuiTypeIndex,CoreGuiTypesList=1,{"Inventory","Leaderboard","Emotes","Chat","Captures","SelfView","All","Console"}
 local FixIndex,Fixes=1,{"Lighting","Camera","Player","Accessory","Boost","Other","All"}
 local UpdateIndex,UpdateList=1,{"Boost","Player","All"}
-local NPCLength=0
+
 local NPCData,PlayerData={},{}
 local InfoCache,FlyCache,TeleportToolCache,FlashlightToolCache,ESPToolCache,ESPToolObjectCache,ESPCache,ESPNPCCache,HitboxCache={},{},{},{},{},{},{},{},{}
 local SelectIndex,SelectInfo=1,nil
@@ -3539,17 +3539,15 @@ end
 function RemoveNPC(npc)
 	local data=NPCData[npc]
 	if not data then return end
-	local name=npc.Name
 	if data.Character then data.Character=nil end
 	if data.Connections then for i,v in next,data.Connections do v:Disconnect() data.Connections[i]=nil end data.Connections=nil end
-	NPCData[npc]=nil NPCLength-=1
+	NPCData[npc]=nil
 end
 
 function AddNPC(npc)
 	if NPCData[npc] then return end
 	NPCData[npc]={["Character"]=npc,["Connections"]={}}
-    NPCLength+=1
-	local name=npc.Name
+	if ESPNPCEnabled then ESPNPC(npc) end
 	local humanoid=npc:FindFirstChildOfClass("Humanoid")
 	if humanoid then
 		local healthChanged,maxHealthChanged,died;
@@ -3575,12 +3573,10 @@ function AddNPC(npc)
 		end)
 		table.insert(NPCData[npc].Connections,died)
 	end
-	if ESPNPCEnabled then ESPNPC(npc)
-	end
+end
 
-	for i,v in next,workspace:GetDescendants() do
-		task.defer(function() task.wait() if IsNPC(v) then AddNPC(v) end end)
-	end
+for i,v in next,workspace:GetDescendants() do
+	task.defer(function() task.wait() if IsNPC(v) then AddNPC(v) end end)
 end
 
 MainCache.NPCAdded=workspace.DescendantAdded:Connect(function(v)
@@ -4197,7 +4193,6 @@ end
 function EnableESPNPC(enabled)
 	ESPNPCEnabled=enabled
 	if enabled then
-        warn("NPC Length:,NPCLength)
 		for npc,k in pairs(NPCData) do ESPNPC(npc) end
 	else
 		ClearCache(ESPNPCCache) ESPNPCCache={}
