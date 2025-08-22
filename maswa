@@ -72,12 +72,6 @@ local InputPriority=Enum.ContextActionPriority.High.Value
 local Prefix="/"
 
 local Environment={}
-Environment.Settings={
-	TeamCheck=false,
-	AliveCheck=false,
-	WallCheck=false
-
-}
 Environment.Values={
 	["MaxZoom"]=40,["MinZoom"]=0.5,["WalkSpeed"]=16,["Health"]=100,["Jump"]=50,["FlySpeed"]=50,["SpinSpeed"]=9999,["AnimSpeed"]=2,["HitboxSize"]=1,
 	["AimType"]="Player",["AimLockType"]="Head",["AimRange"]=1000,["AimAliveCheck"]=true,["AimWallCheck"]=true,["AimTeamCheck"]=false
@@ -111,12 +105,12 @@ Environment.Saved={
 		["MaxZoom"]=40,["MinZoom"]=0.5,["WalkSpeed"]=16,["Health"]=100,["Jump"]=50,["FlySpeed"]=50,["SpinSpeed"]=9999,["AnimSpeed"]=2,["HitboxSize"]=1,
 		["AimType"]="Player",["AimLockType"]="Head",["AimRange"]=1000,["AimAliveCheck"]=true,["AimWallCheck"]=true,["AimTeamCheck"]=false
 	},
-	["Collisions"]={}
+	["Collisions"]={},
+	["Accessories"]={}
 }
 
 local Notifications={}
 
-local SaveAccessory={}
 local Commands={}
 local Cached={}
 local TurnColors={
@@ -140,7 +134,7 @@ local FixIndex,Fixes=1,{"Lighting","Camera","Player","Accessory","Boost","Other"
 local UpdateIndex,UpdateList=1,{"Boost","Player","All"}
 
 local NPCData,PlayerData={},{}
-local InfoCache,FlyCache,TeleportToolCache,FlashlightToolCache,ESPToolCache,ESPToolObjectCache,ESPCache,ESPNPCCache,HitboxCache={},{},{},{},{},{},{},{},{}
+local InfoCache,FlyCache,ESPCache,ESPNPCCache,HitboxCache={},{},{},{},{}
 local SelectIndex,SelectInfo=1,nil
 local raycastParams=RaycastParams.new()
 local AimRaycastParams=RaycastParams.new()
@@ -4692,17 +4686,16 @@ end
 
 function EnableAccessory(enabled,player)
 	local char=player.Character
-	if not IsAlive(char) then return end
 	if enabled then
 		NoAccessoryEnabled=true
 		EnableAccessory(false,player)
-		for i,v in ipairs(char:GetChildren()) do if v:IsA("Accessory") or v:IsA("Hat") then table.insert(SaveAccessory,v) v.Parent=nil  end end
+		for i,v in ipairs(char:GetChildren()) do if v:IsA("Accessory") or v:IsA("Hat") then table.insert(Environment.Saved.Accessories,v) v.Parent=nil  end end
 		CharacterFrame.NoHatToggle.Turns.BackgroundColor3=TurnColors[true]
 	else
-		if next(SaveAccessory) then
+		if next(Environment.Saved.Accessories) then
 			NoAccessoryEnabled=false
 			for i,v in ipairs(char:GetChildren()) do if v:IsA("Accessory") or v:IsA("Hat") then v:Destroy() end end
-			for i,v in ipairs(SaveAccessory) do v.Parent=char end SaveAccessory={}
+			for i,v in ipairs(Environment.Saved.Accessories) do v.Parent=char end Environment.Saved.Accessories={}
 			CharacterFrame.NoHatToggle.Turns.BackgroundColor3=TurnColors[false]
 			Notify("Restore Accessory","Restores accessory")
 		end
@@ -4859,24 +4852,26 @@ function EnableDisco(enabled)
 	Notify("Disco","Disco "..TurnTexts[enabled])
 end
 
-function GiveTeleportTool(enabled,player,s)
+local TeleportTool,TeleportToolActivated,TeleportToolCharAdded;
+
+function GiveTeleportTool(enabled,player,otherChar)
 	TeleportToolEnabled=enabled
-	ClearCache(TeleportToolCache) TeleportToolCache={}
 	if enabled then
-		local char=player.Character
-		if IsAlive(char) then
-			local tool=CreateTool("Teleport Tool",char)
-			GetHumanoid(char):UnequipTools()
-			table.insert(TeleportToolCache,tool)
-			local tpToolConnection=tool.Activated:Connect(function() if not IsAlive(Mouse.Target) then return end char:MoveTo(Mouse.Hit.Position+Vector3.new(0,2,0)) end)
-			table.insert(TeleportToolCache,tpToolConnection)
-			local tpToolCharAddedConnection=player.CharacterAdded:Connect(function() GiveTeleportTool(TeleportToolEnabled,player,true) end)
-			table.insert(TeleportToolCache,tpToolCharAddedConnection)
-			if not s then
-				Notify("Teleport Tool","Give a Teleport Tool")
-			end
+		local char=otherChar or player.Character
+		TeleportTool=Cleanup(TeleportTool)
+		TeleportTool=CreateTool("Teleport Tool",char)
+		GetHumanoid(char):UnequipTools()
+		TeleportToolActivated=Cleanup(TeleportToolActivated) 
+		TeleportToolActivated=TeleportTool.Activated:Connect(function() if not IsAlive(Mouse.Target) then return end char:MoveTo(Mouse.Hit.Position+Vector3.new(0,2,0)) end)
+		TeleportToolCharAdded=Cleanup(TeleportToolCharAdded) 
+		TeleportToolCharAdded=player.CharacterAdded:Connect(function(newChar) GiveTeleportTool(TeleportToolEnabled,player,newChar) end)
+		if not otherChar then
+			Notify("Teleport Tool","Give a Teleport Tool")
 		end
 	else
+		TeleportTool=Cleanup(TeleportTool)
+		TeleportToolActivated=Cleanup(TeleportToolActivated) 
+		TeleportToolCharAdded=Cleanup(TeleportToolCharAdded)
 		Notify("Teleport Tool","Remove Teleport Tool")
 	end
 end
@@ -4899,16 +4894,17 @@ function SetESPToolHightLight(v)
 	end
 end
 
-function GiveESPTool(enabled,player,s)
+local ESPTool,ESPToolActivated,ESPToolCharAdded;
+
+function GiveESPTool(enabled,player,otherChar)
 	ESPToolEnabled=enabled
-	ClearCache(ESPToolCache) ESPToolCache={}
 	if enabled then
-		local char=player.Character
-		if not IsAlive(char) then return end
-		local tool=CreateTool("ESP Tool",char)
+		local char=otherChar or player.Character
+		ESPTool=Cleanup(ESPTool)
+		ESPTool=CreateTool("ESP Tool",char)
 		GetHumanoid(char):UnequipTools()
-		table.insert(ESPToolCache,tool)
-		local espToolConnection=tool.Activated:Connect(function()
+		ESPToolActivated=Cleanup(ESPToolActivated) 
+		ESPToolActivated=ESPTool.Activated:Connect(function()
 			local target=Mouse.Target
 			if not IsAlive(target) then return end
 			local char=target.Parent
@@ -4919,58 +4915,55 @@ function GiveESPTool(enabled,player,s)
 				SetESPToolHightLight(target)
 			end
 		end)
-		table.insert(ESPToolCache,espToolConnection)
-		local espToolCharAddedConnection=player.CharacterAdded:Connect(function() GiveESPTool(ESPToolEnabled,player,true) end)
-		table.insert(ESPToolCache,espToolCharAddedConnection)
-		if not s then
+		ESPToolCharAdded=Cleanup(ESPToolCharAdded)
+		ESPToolCharAdded=player.CharacterAdded:Connect(function(newChar) GiveESPTool(ESPToolEnabled,player,newChar) end)
+		if not otherChar then
 			Notify("ESP Tool","Give a ESP Tool")
 		end
 	else
-		ClearCache(ESPToolObjectCache) ESPToolObjectCache={}
+		ESPTool=Cleanup(ESPTool)
+		ESPToolActivated=Cleanup(ESPToolActivated) 
+		ESPToolCharAdded=Cleanup(ESPToolCharAdded)
+		ClearCache(ESPToolCache) ESPToolCache={}
 		Notify("ESP Tool","Remove ESP Tool")
 	end
 end
 
-function GiveFlashlightTool(enabled,player,s)
+local FlashlightTool,FlashlightToolActivated,FlashlightToolEquipped,FlashlightToolUnequipped,FlashlightToolCharAdded;
+
+function GiveFlashlightTool(enabled,player,otherChar)
 	FlashlightToolEnabled=enabled
-	ClearCache(FlashlightToolCache) FlashlightToolCache={}
 	if enabled then
-		local char=player.Character
-		if not IsAlive(char) then return end
+		local char=otherChar or player.Character
+		FlashlightTool=Cleanup(FlashlightTool)
 		local tool=Instance.new("Tool")
 		local handle=Instance.new("Part")
 		local specialMesh=Instance.new("SpecialMesh")
 		local sound1=Instance.new("Sound")
 		local sound2=Instance.new("Sound")
 		local spotLight=Instance.new("SpotLight")
-
 		tool.Name="Flashlight"
 		tool.CanBeDropped=true
 		tool.RequiresHandle=true
 		tool.Parent=char;
-
 		handle.Name="Handle"
 		handle.Parent=tool
 		handle.Color=Color3.fromRGB(105,64,40);
 		handle.Material=Enum.Material.Wood;
 		handle.Size=Vector3.new(0.400,0.600,2.400);
 		handle.Position=Vector3.new(-32.800,0.295,-4.200);
-
 		specialMesh.Parent=handle;
 		specialMesh.MeshId="http://www.roblox.com/asset/?id=115955313"
 		specialMesh.MeshType=Enum.MeshType.FileMesh;
 		specialMesh.TextureId="http://www.roblox.com/asset?id=115984370"
 		specialMesh.Scale=Vector3.new(0.7,0.7,0.7)
-
 		sound1.Name="Activated";
 		sound1.Parent=handle
 		sound1.SoundId="rbxassetid://198914875"
 		sound1.Volume=2;
-
 		sound2.Name="Equip";
 		sound2.Parent=handle;
 		sound2.SoundId="rbxassetid://4458750140";
-
 		spotLight.Parent=handle
 		spotLight.Angle=120
 		spotLight.Brightness=3
@@ -4978,28 +4971,33 @@ function GiveFlashlightTool(enabled,player,s)
 		spotLight.Face=Enum.NormalId.Front
 		spotLight.Range=60
 		spotLight.Shadows=false
+		FlashlightTool=tool
 		GetHumanoid(char):UnequipTools()
-		table.insert(FlashlightToolCache,tool)
-		local flashlightToolConnection=tool.Activated:Connect(function()
+		FlashlightToolActivated=Cleanup(FlashlightToolActivated)
+		FlashlightToolActivated=tool.Activated:Connect(function()
 			spotLight.Enabled=not spotLight.Enabled
 			sound1:Play()
 		end)
-		table.insert(FlashlightToolCache,flashlightToolConnection)
-		local flashlightToolEquippedConnection=tool.Equipped:Connect(function()
+		FlashlightToolEquipped=Cleanup(FlashlightToolEquipped)
+		FlashlightToolEquipped=tool.Equipped:Connect(function()
 			spotLight.Enabled=false
 			sound2:Play()
 		end)
-		table.insert(FlashlightToolCache,flashlightToolEquippedConnection)
-		local flashlightToolUnequippedConnection=tool.Unequipped:Connect(function()
+		FlashlightToolUnequipped=Cleanup(FlashlightToolUnequipped)
+		FlashlightToolUnequipped=tool.Unequipped:Connect(function()
 			sound2:Play()
 		end)
-		table.insert(FlashlightToolCache,flashlightToolUnequippedConnection)
-		local flashlightToolCharAddedConnection=player.CharacterAdded:Connect(function() GiveFlashlightTool(FlashlightToolEnabled,player,true) end)
-		table.insert(FlashlightToolCache,flashlightToolCharAddedConnection)
-		if not s then
+		FlashlightToolCharAdded=Cleanup(FlashlightToolCharAdded)
+		FlashlightToolCharAdded=player.CharacterAdded:Connect(function(newChar) GiveFlashlightTool(FlashlightToolEnabled,player,newChar) end)
+		if not otherChar then
 			Notify("Flashlight Tool","Give a Flashlight Tool")
 		end
 	else
+		FlashlightTool=Cleanup(FlashlightTool)
+		FlashlightToolActivated=Cleanup(FlashlightToolActivated) 
+		FlashlightToolEquipped=Cleanup(FlashlightToolEquipped)
+		FlashlightToolUnequipped=Cleanup(FlashlightToolUnequipped)
+		FlashlightToolCharAdded=Cleanup(FlashlightToolCharAdded)
 		Notify("Flashlight Tool","Remove Flashlight Tool")
 	end
 end
@@ -5007,9 +5005,9 @@ end
 function ClearAllCache()
 	InfoEnabled,ThirdPersonEnabled,DiscoEnabled,MaxZoomEnabled,MinZoomEnabled,AimEnabled,ESPEnabled,ESPNPCEnabled,BoostAnimEnabled,IdleAnimEnabled,AntiFlingEnabled,WalkSpeedEnabled,HealthEnabled,JumpEnabled,InvisibleEnabled,SpinEnabled,FollowEnabled,NoclipEnabled,FlyEnabled,ViewEnabled,AutoJumpEnabled,NoAccessoryEnabled,HitboxEnabled,SuperHitboxEnabled,TeleportToolEnabled,ESPToolEnabled,FlashlightToolEnabled=false,LocalPlayer.CameraMode==Enum.CameraMode.Classic,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false
 	RemoveDance()
-	ClearCache({AFKIdled,AntiLagObjectAdded,SpinCharAdded,AntiFlingCharAdded,ViewCharAdded,AntiFlingAdded,FollowLooped,AutoJumpLooped,NoclipLooped,AimLooped,MaxZoomThread,MinZoomThread,DiscoThread,WalkSpeedThread,HealthThread,JumpThread,DanceAnimTrack,BoostAnimThread,SpinThread})
-	ClearCache({MainCache,InfoCache,FlyCache,TeleportToolCache,FlashlightToolCache,ESPToolCache}) 
-	TeleportToolCache={} FlashlightToolCache={} ESPToolCache={}
+	ClearCache({TeleportTool,TeleportToolActivated,TeleportToolCharAdded,ESPTool,ESPToolActivated,ESPToolCharAdded,FlashlightTool,FlashlightToolActivated,FlashlightToolEquipped,FlashlightToolUnequipped,FlashlightToolCharAdded,AFKIdled,AntiLagObjectAdded,SpinCharAdded,AntiFlingCharAdded,ViewCharAdded,AntiFlingAdded,FollowLooped,AutoJumpLooped,NoclipLooped,AimLooped,MaxZoomThread,MinZoomThread,DiscoThread,WalkSpeedThread,HealthThread,JumpThread,DanceAnimTrack,BoostAnimThread,SpinThread})
+	ClearCache({MainCache,InfoCache,FlyCache,ESPToolCache})
+	MainCache={} InfoCache={} FlyCache={} ESPToolCache={}
 end
 
 BarList={}
