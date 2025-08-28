@@ -24,7 +24,6 @@ Players=game:GetService("Players")
 ReplicatedStorage=game:GetService("ReplicatedStorage")
 UserInputService=game:GetService("UserInputService")
 TeleportService=game:GetService("TeleportService")
-lUserService=game:GetService("UserService")
 Lighting=game:GetService("Lighting")
 StarterGui=game:GetService("StarterGui")
 StarterPlayer=game:GetService("StarterPlayer")
@@ -430,18 +429,32 @@ function SafePlayer(added,removed)
 	end)
 	Players.PlayerRemoving:Connect(removed)
 end
-function GetPlayerIcon(userId)
+function GetUserIcon(userId)
 	local success,image=pcall(function()
 		return Players:GetUserThumbnailAsync(userId,Enum.ThumbnailType.HeadShot,Enum.ThumbnailSize.Size100x100)
 	end)
-	return success and image or ""
+	if success and image then return image end return nil
 end
-function GetUserInfo(userId)
-	local success,userInfo=pcall(function()
-		return UserService:GetUserInfosByUserIdsAsync({userId})[1]
-	end)
-	if success and userInfo then return userInfo end
-	return nil
+function GetUserInfo(userId):{Name:string,DisplayName:string,UserId:number,Age:number,InServer:boolean}
+	local results={}
+	results.UserId=userId
+	local player=Players:GetPlayerByUserId(userId)
+	results.InServer=player and true or false
+	if player then
+		results.Name=player.Name
+		results.DisplayName=player.DisplayName
+		results.Age=player.AccountAge
+	else
+		local success,userInfo=pcall(function()
+			return UserService:GetUserInfosByUserIdsAsync({userId})[1]
+		end)
+		if success and userInfo then
+			results.Name=userInfo.Username or "nil"
+			results.DisplayName=userInfo.DisplayName or "nil"
+			results.Age=0
+		end
+	end
+	return results
 end
 
 -- MarketplaceService Utilities
@@ -3576,11 +3589,11 @@ function AddNPC(npc)
 end
 
 for i,v in next,workspace:GetDescendants() do
-	task.defer(function() task.wait() if IsNPC(v) then AddNPC(v) end end)
+	task.defer(function() RunService.RenderStepped:Wait() task.wait() if IsNPC(v) then AddNPC(v) end end)
 end
 
 MainCache.NPCAdded=workspace.DescendantAdded:Connect(function(v)
-	task.wait()
+	RunService.RenderStepped:Wait() task.wait()
 	if IsNPC(v) then AddNPC(v) end
 end)
 
@@ -4852,26 +4865,24 @@ function EnableDisco(enabled)
 	Notify("Disco","Disco "..TurnTexts[enabled])
 end
 
-local TeleportTool,TeleportToolActivated,TeleportToolCharAdded;
+local TeleportTool,TeleportToolActivated;
 
-function GiveTeleportTool(enabled,player,otherChar)
+function GiveTeleportTool(enabled,character,useNotify)
 	TeleportToolEnabled=enabled
 	if enabled then
-		local char=otherChar or player.Character
 		TeleportTool=Cleanup(TeleportTool)
-		TeleportTool=CreateTool("Teleport Tool",char)
-		GetHumanoid(char):UnequipTools()
+		TeleportTool=CreateTool("Teleport Tool",character)
+		GetHumanoid(character):UnequipTools()
 		TeleportToolActivated=Cleanup(TeleportToolActivated) 
-		TeleportToolActivated=TeleportTool.Activated:Connect(function() if not IsAlive(Mouse.Target) then return end char:MoveTo(Mouse.Hit.Position+Vector3.new(0,2,0)) end)
-		TeleportToolCharAdded=Cleanup(TeleportToolCharAdded) 
-		TeleportToolCharAdded=player.CharacterAdded:Connect(function(newChar) GiveTeleportTool(TeleportToolEnabled,player,newChar) end)
-		if not otherChar then
+		TeleportToolActivated=TeleportTool.Activated:Connect(function() 
+			if not Mouse.Target then return end character:MoveTo(Mouse.Hit.Position+Vector3.new(0,2,0)) 
+		end)
+		if useNotify then
 			Notify("Teleport Tool","Give a Teleport Tool")
 		end
 	else
 		TeleportTool=Cleanup(TeleportTool)
 		TeleportToolActivated=Cleanup(TeleportToolActivated) 
-		TeleportToolCharAdded=Cleanup(TeleportToolCharAdded)
 		Notify("Teleport Tool","Remove Teleport Tool")
 	end
 end
@@ -4894,15 +4905,14 @@ function SetESPToolHightLight(v)
 	end
 end
 
-local ESPTool,ESPToolActivated,ESPToolCharAdded;
+local ESPTool,ESPToolActivated;
 
-function GiveESPTool(enabled,player,otherChar)
+function GiveESPTool(enabled,character,useNotify)
 	ESPToolEnabled=enabled
 	if enabled then
-		local char=otherChar or player.Character
 		ESPTool=Cleanup(ESPTool)
-		ESPTool=CreateTool("ESP Tool",char)
-		GetHumanoid(char):UnequipTools()
+		ESPTool=CreateTool("ESP Tool",character)
+		GetHumanoid(character):UnequipTools()
 		ESPToolActivated=Cleanup(ESPToolActivated) 
 		ESPToolActivated=ESPTool.Activated:Connect(function()
 			local target=Mouse.Target
@@ -4915,26 +4925,22 @@ function GiveESPTool(enabled,player,otherChar)
 				SetESPToolHightLight(target)
 			end
 		end)
-		ESPToolCharAdded=Cleanup(ESPToolCharAdded)
-		ESPToolCharAdded=player.CharacterAdded:Connect(function(newChar) GiveESPTool(ESPToolEnabled,player,newChar) end)
-		if not otherChar then
+		if useNotify then
 			Notify("ESP Tool","Give a ESP Tool")
 		end
 	else
 		ESPTool=Cleanup(ESPTool)
 		ESPToolActivated=Cleanup(ESPToolActivated) 
-		ESPToolCharAdded=Cleanup(ESPToolCharAdded)
 		ClearCache(ESPToolCache) ESPToolCache={}
 		Notify("ESP Tool","Remove ESP Tool")
 	end
 end
 
-local FlashlightTool,FlashlightToolActivated,FlashlightToolEquipped,FlashlightToolUnequipped,FlashlightToolCharAdded;
+local FlashlightTool,FlashlightToolActivated,FlashlightToolEquipped,FlashlightToolUnequipped;
 
-function GiveFlashlightTool(enabled,player,otherChar)
+function GiveFlashlightTool(enabled,character,useNotify)
 	FlashlightToolEnabled=enabled
 	if enabled then
-		local char=otherChar or player.Character
 		FlashlightTool=Cleanup(FlashlightTool)
 		local tool=Instance.new("Tool")
 		local handle=Instance.new("Part")
@@ -4945,7 +4951,7 @@ function GiveFlashlightTool(enabled,player,otherChar)
 		tool.Name="Flashlight"
 		tool.CanBeDropped=true
 		tool.RequiresHandle=true
-		tool.Parent=char;
+		tool.Parent=character;
 		handle.Name="Handle"
 		handle.Parent=tool
 		handle.Color=Color3.fromRGB(105,64,40);
@@ -4972,7 +4978,7 @@ function GiveFlashlightTool(enabled,player,otherChar)
 		spotLight.Range=60
 		spotLight.Shadows=false
 		FlashlightTool=tool
-		GetHumanoid(char):UnequipTools()
+		GetHumanoid(character):UnequipTools()
 		FlashlightToolActivated=Cleanup(FlashlightToolActivated)
 		FlashlightToolActivated=tool.Activated:Connect(function()
 			spotLight.Enabled=not spotLight.Enabled
@@ -4987,9 +4993,7 @@ function GiveFlashlightTool(enabled,player,otherChar)
 		FlashlightToolUnequipped=tool.Unequipped:Connect(function()
 			sound2:Play()
 		end)
-		FlashlightToolCharAdded=Cleanup(FlashlightToolCharAdded)
-		FlashlightToolCharAdded=player.CharacterAdded:Connect(function(newChar) GiveFlashlightTool(FlashlightToolEnabled,player,newChar) end)
-		if not otherChar then
+		if useNotify then
 			Notify("Flashlight Tool","Give a Flashlight Tool")
 		end
 	else
@@ -4997,7 +5001,6 @@ function GiveFlashlightTool(enabled,player,otherChar)
 		FlashlightToolActivated=Cleanup(FlashlightToolActivated) 
 		FlashlightToolEquipped=Cleanup(FlashlightToolEquipped)
 		FlashlightToolUnequipped=Cleanup(FlashlightToolUnequipped)
-		FlashlightToolCharAdded=Cleanup(FlashlightToolCharAdded)
 		Notify("Flashlight Tool","Remove Flashlight Tool")
 	end
 end
@@ -5005,7 +5008,7 @@ end
 function ClearAllCache()
 	InfoEnabled,ThirdPersonEnabled,DiscoEnabled,MaxZoomEnabled,MinZoomEnabled,AimEnabled,ESPEnabled,ESPNPCEnabled,BoostAnimEnabled,IdleAnimEnabled,AntiFlingEnabled,WalkSpeedEnabled,HealthEnabled,JumpEnabled,InvisibleEnabled,SpinEnabled,FollowEnabled,NoclipEnabled,FlyEnabled,ViewEnabled,AutoJumpEnabled,NoAccessoryEnabled,HitboxEnabled,SuperHitboxEnabled,TeleportToolEnabled,ESPToolEnabled,FlashlightToolEnabled=false,LocalPlayer.CameraMode==Enum.CameraMode.Classic,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false
 	RemoveDance()
-	ClearCache({TeleportTool,TeleportToolActivated,TeleportToolCharAdded,ESPTool,ESPToolActivated,ESPToolCharAdded,FlashlightTool,FlashlightToolActivated,FlashlightToolEquipped,FlashlightToolUnequipped,FlashlightToolCharAdded,AFKIdled,AntiLagObjectAdded,SpinCharAdded,AntiFlingCharAdded,ViewCharAdded,AntiFlingAdded,FollowLooped,AutoJumpLooped,NoclipLooped,AimLooped,MaxZoomThread,MinZoomThread,DiscoThread,WalkSpeedThread,HealthThread,JumpThread,DanceAnimTrack,BoostAnimThread,SpinThread})
+	ClearCache({TeleportTool,TeleportToolActivated,ESPTool,ESPToolActivated,FlashlightTool,FlashlightToolActivated,FlashlightToolEquipped,FlashlightToolUnequipped,AFKIdled,AntiLagObjectAdded,SpinCharAdded,AntiFlingCharAdded,ViewCharAdded,AntiFlingAdded,FollowLooped,AutoJumpLooped,NoclipLooped,AimLooped,MaxZoomThread,MinZoomThread,DiscoThread,WalkSpeedThread,HealthThread,JumpThread,DanceAnimTrack,BoostAnimThread,SpinThread})
 	ClearCache({MainCache,InfoCache,FlyCache,ESPToolCache})
 	MainCache={} InfoCache={} FlyCache={} ESPToolCache={}
 end
@@ -5598,27 +5601,27 @@ AddCommand({"fixlighting","restorelighting"},function()
 end)
 
 AddCommand({"teleporttool","tptool"},function()
-	GiveTeleportTool(true,LocalPlayer)
+	GiveTeleportTool(true,LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait(),true)
 end)
 
 AddCommand({"unteleporttool","untptool"},function()
-	GiveTeleportTool(false,LocalPlayer)
+	GiveTeleportTool(false)
 end)
 
 AddCommand({"flashlighttool","lighttool"},function()
-	GiveFlashlightTool(true,LocalPlayer)
+	GiveFlashlightTool(true,LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait(),true)
 end)
 
 AddCommand({"unflashlighttool","unlighttool"},function()
-	GiveFlashlightTool(false,LocalPlayer)
+	GiveFlashlightTool(false)
 end)
 
 AddCommand({"esptool"},function()
-	GiveESPTool(true,LocalPlayer)
+	GiveESPTool(true,LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait(),true)
 end)
 
 AddCommand({"unesptool"},function()
-	GiveESPTool(false,LocalPlayer)
+	GiveESPTool(false)
 end)
 
 AddCommand({"esp"},function()
@@ -5750,28 +5753,14 @@ function SetPlayerFrame(userIdOrName)
 	else
 		userId=tonumber(userIdOrName)
 	end
-	local name="Roblox"
-	local displayName="Roblox"
-	local age=nil
-	local player=Players:GetPlayerByUserId(userId)
-	if player then
-		name=player.Name
-		displayName=player.DisplayName
-		age=player.AccountAge
-	else
-		local userInfo=GetUserInfo(userId)
-		if userInfo then
-			name=userInfo.Username or "nil"
-			displayName=userInfo.DisplayName or "nil"
-		end
-	end
+	local userInfo=GetUserInfo(userId)
 	local playerInfoFrame=SelectPlayerFrame.PlayerInfo
-	playerInfoFrame.TextLabel.Text="Name: @"..tostring(name)
-	playerInfoFrame.DisplayLabel.Text="Display: "..displayName
+	playerInfoFrame.TextLabel.Text="Name: @"..(userInfo.Name or "Roblox")
+	playerInfoFrame.DisplayLabel.Text="Display: "..(userInfo.DisplayName or "Roblox")
 	playerInfoFrame.IdLabel.Text="ID: "..tostring(userId)
-	playerInfoFrame.AgeLabel.Text="Age: ".. tostring(age)
-	playerInfoFrame.InGameLabel.Text="In Game: "..(IsAlive(player) and "Yes" or "No")
-	task.spawn(function() playerInfoFrame.ImageLabel.Image=GetPlayerIcon(userId) or "" end)
+	playerInfoFrame.AgeLabel.Text="Age: "..tostring(userInfo.Age or 0)
+	playerInfoFrame.InGameLabel.Text="In Game: "..userInfo.InServer
+	task.spawn(function() playerInfoFrame.ImageLabel.Image=GetUserIcon(userId) or "" end)
 	playerInfoFrame.Visible=true
 end
 
@@ -5810,7 +5799,7 @@ function AddPlayerFrame(player,index)
 	local template=SelectPlayerFrame.PlayersScroller.PlayerTemplate:Clone()
 	template.TextLabel.Text=player.DisplayName
 	template.Name=player.Name.."_Button"
-	template.ImageLabel.Image=GetPlayerIcon(userId)
+	template.ImageLabel.Image=GetUserIcon(userId) or ""
 	data.Connection=template.MouseButton1Click:Connect(function()
 		SelectIndex,SelectInfo=index,{["Value"]=player,["Name"]=userName,["UserId"]=userId,["Template"]=template}
 		ApplyPlayerFrame()
@@ -5847,6 +5836,12 @@ function RemovePlayer(userId)
 		end
 	end
 end
+
+MainCache.LocalCharAdded=LocalPlayer.CharacterAdded:Connect(function(character)
+	if TeleportToolEnabled then GiveTeleportTool(true,character,false) end
+	if ESPToolEnabled then GiveESPTool(true,character,false) end
+	if FlashlightToolEnabled then GiveFlashlightTool(true,character,false) end
+end)
 
 SafePlayer(function(player)
 	if ESPEnabled then ESPPlayer(player) end
