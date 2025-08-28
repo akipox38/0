@@ -3890,7 +3890,7 @@ end
 
 function EnableMaxZoom(no,player,s)
 	Environment.Values.MaxZoom=Strs.GetNumber(s,Environment.Saved.Player.CameraMaxZoomDistance) or Environment.Values.MaxZoom
-	Environment.player.CameraMaxZoomDistance=Environment.Values.MaxZoom
+	player.CameraMaxZoomDistance=Environment.Values.MaxZoom
 	if no==1 or no==0 then
 		MaxZoomEnabled=no==1
 		MaxZoomThread=Cleanup(MaxZoomThread)
@@ -5484,8 +5484,9 @@ AddCommand({"clip","unnoclip","unwallhack","reclip"},function()
 end)
 
 AddCommand({"reset","r"},function()
-	local char=LocalPlayer.Character
-	local humanoid=char:FindFirstChildWhichIsA("Humanoid")
+	if TurnVisible then TurnVisible() task.wait(1) end
+	local char=LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+	local humanoid=GetHumanoid(char)
 	if humanoid then
 		humanoid:ChangeState(Enum.HumanoidStateType.Dead)
 	else
@@ -5494,12 +5495,9 @@ AddCommand({"reset","r"},function()
 end)
 
 AddCommand({"respawn","rspwn"},function()
-	local player=LocalPlayer
-	if not IsAlive(player) then return end
-	local char=GetCharacter(player.Character)
-	if not IsAlive(char) then return end
+	if TurnVisible then TurnVisible() task.wait(1) end
+	local char=LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
 	local rootPart=GetRootPart(char)
-	if not IsAlive(rootPart) then return end
 	local cf=rootPart.CFrame
 	local humanoid=GetHumanoid(char)
 	if humanoid then
@@ -5507,14 +5505,15 @@ AddCommand({"respawn","rspwn"},function()
 	else
 		char:BreakJoints()
 	end
-	repeat task.wait() until GetCharacter(player.Character)~=nil
-	local newChar=player.Character
-	GetHumanoid(newChar,function(newHumanoid)
+	repeat LocalPlayer.CharacterAdded:Wait() until GetCharacter(LocalPlayer.Character)~=nil
+	local newChar=LocalPlayer.Character
+	local newHumanoid=GetHumanoid(newChar)
+	if newHumanoid then
 		newHumanoid:ChangeState(Enum.HumanoidStateType.Seated)
 		task.delay(0.05,function()
 			newHumanoid:ChangeState(Enum.HumanoidStateType.Jumping)
 		end)
-	end)
+	end
 	newChar:PivotTo(cf)
 end)
 
@@ -5759,7 +5758,7 @@ function SetPlayerFrame(userIdOrName)
 	playerInfoFrame.DisplayLabel.Text="Display: "..(userInfo.DisplayName or "Roblox")
 	playerInfoFrame.IdLabel.Text="ID: "..tostring(userId)
 	playerInfoFrame.AgeLabel.Text="Age: "..tostring(userInfo.Age or 0)
-	playerInfoFrame.InGameLabel.Text="In Game: "..userInfo.InServer
+	playerInfoFrame.InGameLabel.Text="In Game: "..(userInfo.InServer and "Yes" or "No")
 	task.spawn(function() playerInfoFrame.ImageLabel.Image=GetUserIcon(userId) or "" end)
 	playerInfoFrame.Visible=true
 end
@@ -5939,15 +5938,19 @@ for k,v in ipairs(BarList) do
 				else
 					v.Value=v.List[j]
 				end
-				if j<=1 then
-					ExecuteCommand(`unloop{v.Name}`)
-				end
 				if v.Value then
 					if IsAlive(v.TextBox) then v.TextBox.Text=v.Name=="jumppower" and `{Strs.ToFloatString(v.Value)} [{propertyName}]` or `{Strs.ToFloatString(v.Value)}` end
-					if j==2 then
-						ExecuteCommand(`loop{v.Name} {v.Value}`)
+					if j<=1 then
+						v.Looped=nil
+						ExecuteCommand(`unloop{v.Name}`)
+					else
+						if j==2 or not v.Looped then
+							v.Looped=true
+							ExecuteCommand(`loop{v.Name} {v.Value}`)
+						else
+							ExecuteCommand(`{v.Name} {v.Value}`)
+						end
 					end
-					ExecuteCommand(`{v.Name} {v.Value}`)
 				end
 				v.Index=j
 			end)
@@ -5966,17 +5969,22 @@ for k,v in ipairs(BarList) do
 			else
 				v.Value=v.List[index]
 			end
-			if index<=1 then
-				ExecuteCommand(`unloop{v.Name}`)
-			end
 			if v.Value then
 				if IsAlive(v.TextBox) then v.TextBox.Text=v.Name=="jumppower" and `{Strs.ToFloatString(v.Value)} [{propertyName}]` or `{Strs.ToFloatString(v.Value)}` end
-				if index==2 then
-					ExecuteCommand(`loop{v.Name} {v.Value}`)
+				if index<=1 then
+					v.Looped=nil
+					ExecuteCommand(`unloop{v.Name}`)
+				else
+					if index==2 or not v.Looped then
+						v.Looped=true
+						ExecuteCommand(`loop{v.Name} {v.Value}`)
+					else
+						ExecuteCommand(`{v.Name} {v.Value}`)
+					end
 				end
-				ExecuteCommand(`{v.Name} {v.Value}`)
 			end
 		end
+		warn(index)
 		v.Index=index
 	end)
 	v.LB.Activated:Connect(function()
@@ -5992,18 +6000,22 @@ for k,v in ipairs(BarList) do
 			else
 				v.Value=v.List[index]
 			end
-			if index<=1 then
-				ExecuteCommand(`unloop{v.Name}`)
-			end
 			if v.Value then
 				if IsAlive(v.TextBox) then v.TextBox.Text=v.Name=="jumppower" and `{Strs.ToFloatString(v.Value)} [{propertyName}]` or `{Strs.ToFloatString(v.Value)}` end
-				if index==2 then
-					ExecuteCommand(`loop{v.Name} {v.Value}`)
+				if index<=1 then
+					v.Looped=nil
+					ExecuteCommand(`unloop{v.Name}`)
 				else
-					ExecuteCommand(`{v.Name} {v.Value}`)
+					if index==2 or not v.Looped then
+						v.Looped=true
+						ExecuteCommand(`loop{v.Name} {v.Value}`)
+					else
+						ExecuteCommand(`{v.Name} {v.Value}`)
+					end
 				end
 			end
 		end
+		warn(index)
 		v.Index=index
 	end)
 	v.TextBox.FocusLost:Connect(function(enterPress)
@@ -6024,20 +6036,26 @@ for k,v in ipairs(BarList) do
 					for j,o in ipairs(v.List) do if type(o)=="number" then if o<=inputNumber then newIndex=j realValue=o end end end
 				end
 				index=newIndex or 1
+				if index==1 and inputNumber~=(tonumber(v.List[1]) or 0) then
+					index=2
+				end
 				value=inputNumber
 			end
 		end
 		value=value or realValue
 		v.Index=index v.Value=realValue
-		if index<=1 then
-			ExecuteCommand(`unloop{v.Name}`)
-		end
 		UpdateMinusOrPlusUI({["Name"]=v.Name,["Index"]=index,["Length"]=v.Length,["List"]=v.List,["Frames"]=v.Frames,["TextBox"]=v.TextBox,["RB"]=v.RB,["LB"]=v.LB,["Value"]=inputText})
 		if IsAlive(v.TextBox) then v.TextBox.Text=v.Name=="jumppower" and `{Strs.ToFloatString(value)} [{propertyName}]` or `{Strs.ToFloatString(value)}` end
-		if index==2 then
-			ExecuteCommand(`loop{v.Name} {inputText}`)
+		if index<=1 then
+			v.Looped=nil
+			ExecuteCommand(`unloop{v.Name}`)
 		else
-			ExecuteCommand(`{v.Name} {inputText}`)
+			if index==2 or not v.Looped then
+				v.Looped=true
+				ExecuteCommand(`loop{v.Name} {inputText}`)
+			else
+				ExecuteCommand(`{v.Name} {inputText}`)
+			end
 		end
 	end)
 end
