@@ -31,7 +31,7 @@ for i,name in ipairs({"Players","ReplicatedStorage","UserInputService","RunServi
 	end
 end
 
-local Players,ReplicatedStorage,UserInputService,TeleportService,Lighting,StarterGui,StarterPlayer,RunService,ContextActionService,HttpService,TweenService,VirtualUser,TextChatService,MarketplaceService,UserService=Services["Players"],Services["ReplicatedStorage"],Services["UserInputService"],Services["TeleportService"],Services["Lighting"],Services["StarterGui"],Services["StarterPlayer"],game:GetService(""),Services["ContextActionService"],Services["HttpService"],Services["TweenService"],Services["VirtualUser"],Services["TextChatService"],Services["MarketplaceService"],Services["UserService"]
+local Players,ReplicatedStorage,UserInputService,TeleportService,Lighting,StarterGui,StarterPlayer,RunService,ContextActionService,HttpService,TweenService,VirtualUser,TextChatService,MarketplaceService,UserService=Services["Players"],Services["ReplicatedStorage"],Services["UserInputService"],Services["TeleportService"],Services["Lighting"],Services["StarterGui"],Services["StarterPlayer"],Services["RunService"],Services["ContextActionService"],Services["HttpService"],Services["TweenService"],Services["VirtualUser"],Services["TextChatService"],Services["MarketplaceService"],Services["UserService"]
 
 local IsStudio=RunService:IsStudio()
 local IsLegacyChat=TextChatService.ChatVersion==Enum.ChatVersion.LegacyChatService
